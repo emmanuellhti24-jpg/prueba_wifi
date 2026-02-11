@@ -6,10 +6,12 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const { Server } = require('socket.io');
+const morgan = require('morgan');
 
 // Importaciones locales
-const connectDB = require('./src/config/db'); // Conector de DB
+const connectDB = require('./src/config/db');
 const { verificarToken, permitirRoles } = require('./middleware/auth.js');
+const { initCronJobs } = require('./services/cron.service');
 
 // Modelos y Lógica de Negocio
 const Pedido = require('./models/Pedido');
@@ -29,8 +31,14 @@ const PORT = process.env.PORT || 3000;
 // Conectar a la Base de Datos
 connectDB();
 
+// Iniciar Cron Jobs
+initCronJobs();
+
 // --- 2. MIDDLEWARES GLOBALES ---
-app.use(cors()); // Habilitar Cross-Origin Resource Sharing
+if (process.env.NODE_ENV === 'development') {
+  app.use(morgan('dev'));
+}
+app.use(cors());
 // Desactivar CSP para desarrollo local
 app.use(helmet({
   contentSecurityPolicy: false
@@ -46,6 +54,7 @@ app.use('/api', require('./routes/auth.js')); // Rutas de autenticación (/api/l
 app.use('/api/products', require('./routes/products.js'));
 app.use('/api/inventory', require('./routes/inventory.js'));
 app.use('/api/metrics', require('./routes/metrics.js'));
+app.use('/api/admin/metrics', require('./routes/admin-metrics.js')); // Métricas avanzadas
 app.use('/api/users', require('./routes/users.js'));
 
 // --- 4. RUTAS ESPECIALES (Lógica de negocio principal) ---
