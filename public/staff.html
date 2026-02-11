@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Staff - Panel de Control</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="staff-mode">
+
+    <!-- BARRA DE NAVEGACIÓN -->
+    <nav class="navbar navbar-expand navbar-staff fixed-top px-3">
+        <div class="d-flex align-items-center">
+            <span class="navbar-brand mb-0 h1">🍔 Panel</span>
+            <span id="user-role-badge" class="badge bg-secondary ms-2"></span>
+        </div>
+
+        <div class="nav nav-pills nav-pills-custom">
+            <button class="btn active" data-tab="orders" onclick="switchTab('orders')"><i class="fas fa-receipt me-1"></i> Pedidos</button>
+            <button class="btn" data-tab="menu" onclick="switchTab('menu')"><i class="fas fa-hamburger me-1"></i> Menú</button>
+            <button class="btn" data-tab="inventory" onclick="switchTab('inventory')"><i class="fas fa-boxes-stacked me-1"></i> Inventario</button>
+            <button class="btn" data-tab="users" onclick="switchTab('users')"><i class="fas fa-users me-1"></i> Usuarios</button>
+            <button class="btn" data-tab="metrics" onclick="switchTab('metrics')"><i class="fas fa-chart-line me-1"></i> Métricas</button>
+        </div>
+
+        <button onclick="logout()" class="btn btn-outline-danger fw-bold">
+            <i class="fas fa-sign-out-alt"></i> Salir
+        </button>
+    </nav>
+
+    <!-- CONTENIDO PRINCIPAL -->
+    <main class="container-fluid mt-4 px-4">
+
+        <!-- PESTAÑA PEDIDOS -->
+        <div id="view-orders" class="view-section active">
+            <div id="orders-grid" class="row g-3"></div>
+        </div>
+
+        <!-- PESTAÑA MENÚ -->
+        <div id="view-menu" class="view-section d-none">
+            <button class="btn btn-primary mb-3" onclick="openProductModal()"><i class="fas fa-plus"></i> Nuevo Producto</button>
+            <div class="card shadow-sm border-0">
+                <table class="table table-admin table-hover mb-0">
+                    <thead><tr><th>Nombre</th><th>Categoría</th><th>Precios (1x / 2x / 3x)</th><th>Acciones</th></tr></thead>
+                    <tbody id="menu-table-body"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- PESTAÑA INVENTARIO -->
+        <div id="view-inventory" class="view-section d-none">
+            <button class="btn btn-primary mb-3" onclick="openInventoryModal()"><i class="fas fa-plus"></i> Nuevo Insumo</button>
+            <div class="card shadow-sm border-0">
+                <table class="table table-admin table-hover mb-0" id="inventory-table">
+                    <thead><tr><th>Insumo</th><th>Stock</th><th>Estado</th><th>Acciones</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- PESTAÑA USUARIOS -->
+        <div id="view-users" class="view-section d-none">
+            <button class="btn btn-primary mb-3" onclick="openUserModal()"><i class="fas fa-plus"></i> Nuevo Usuario</button>
+            <div class="card shadow-sm border-0">
+                <table class="table table-admin table-hover mb-0" id="users-table">
+                    <thead><tr><th>Usuario</th><th>Rol</th><th>Acciones</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- PESTAÑA MÉTRICAS -->
+        <div id="view-metrics" class="view-section d-none">
+            <div class="row g-4">
+                <div class="col-md-8"><div class="card p-3"><canvas id="chart-sales"></canvas></div></div>
+                <div class="col-md-4"><div class="card p-3"><canvas id="chart-top"></canvas></div></div>
+            </div>
+        </div>
+    </main>
+
+    <!-- MODAL PRODUCTO -->
+    <div class="modal fade" id="modal-product" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header"><h5 class="modal-title fw-bold">Producto</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+                <div class="modal-body">
+                    <input type="hidden" id="p-id">
+                    <div class="mb-3"><label class="fw-bold small">Nombre</label><input type="text" id="p-name" class="form-control"></div>
+                    <div class="mb-3"><label class="fw-bold small">Imagen</label><input type="file" id="p-img-file" class="form-control" accept="image/*"><input type="hidden" id="p-img-current"></div>
+                    <div class="mb-3"><label class="fw-bold small">Categoría</label><select id="p-cat" class="form-select"><option value="hamburguesas">Hamburguesa</option><option value="hotdogs">Hot Dog</option><option value="extras">Extras / Bebidas</option></select></div>
+                    <div class="row mb-3 bg-light p-3 rounded mx-0">
+                        <div class="col-4"><label class="small fw-bold text-muted">Precio 1</label><input type="number" id="p-price1" class="form-control"></div>
+                        <div class="col-4"><label class="small fw-bold text-muted">Precio 2</label><input type="number" id="p-price2" class="form-control"></div>
+                        <div class="col-4"><label class="small fw-bold text-muted">Precio 3</label><input type="number" id="p-price3" class="form-control"></div>
+                        <div class="col-12 mt-2"><label class="small fw-bold text-muted">Precio Unitario (si no hay promo)</label><input type="number" id="p-unit" class="form-control"></div>
+                    </div>
+                    <div class="mb-3"><label class="fw-bold small">Ingredientes (separar por coma)</label><input type="text" id="p-ing" class="form-control" placeholder="Ej: Cebolla, Tomate, Lechuga"></div>
+                    <div class="mb-3"><label class="fw-bold small">Extras (Nombre:Precio, ...)</label><input type="text" id="p-ext" class="form-control" placeholder="Ej: Queso:10, Tocino:15"></div>
+                    <hr>
+                    <h6 class="text-primary fw-bold"><i class="fas fa-blender"></i> Receta / Inventario</h6>
+                    <div class="input-group mb-2">
+                        <select id="recipe-select" class="form-select"></select>
+                        <input type="number" id="recipe-qty" class="form-control" placeholder="Cant." style="max-width: 80px;">
+                        <button class="btn btn-outline-primary" onclick="addRecipeItem()"><i class="fas fa-plus"></i></button>
+                    </div>
+                    <ul id="recipe-list" class="list-group small"></ul>
+                </div>
+                <div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button><button class="btn btn-primary" onclick="saveProduct()">Guardar Cambios</button></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL INVENTARIO -->
+    <div class="modal fade" id="modal-inventory" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Insumo</h5><button class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><input type="hidden" id="inv-id"><input id="inv-name" class="form-control mb-2" placeholder="Nombre"><input id="inv-qty" type="number" class="form-control mb-2" placeholder="Cantidad"><select id="inv-unit" class="form-select mb-2"><option value="pza">Pieza</option><option value="g">Gramos</option><option value="kg">Kilos</option><option value="ml">Mililitros</option></select><input id="inv-cost" type="number" class="form-control mb-2" placeholder="Costo Unitario"><input id="inv-min" type="number" class="form-control" placeholder="Stock Mínimo"></div><div class="modal-footer"><button onclick="saveInventory()" class="btn btn-primary">Guardar</button></div></div></div></div>
+    
+    <!-- MODAL USUARIO -->
+    <div class="modal fade" id="modal-user" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Usuario</h5><button class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><input id="u-name" class="form-control mb-2" placeholder="Username"><input id="u-pass" type="password" class="form-control mb-2" placeholder="Contraseña"><select id="u-role" class="form-select"><option value="cashier">Cajero</option><option value="cook">Cocinero</option><option value="admin">Admin</option></select></div><div class="modal-footer"><button onclick="saveUser()" class="btn btn-primary">Guardar</button></div></div></div></div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="admin.js"></script>
+</body>
+</html>

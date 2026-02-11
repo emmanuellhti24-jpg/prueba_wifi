@@ -1,0 +1,3826 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+middleware/
+  auth.js
+models/
+  Inventory.js
+  Merma.js
+  Pedido.js
+  Product.js
+  Sale.js
+  StockManager.js
+  Supplier.js
+  Usuario.js
+public/
+  admin.html
+  admin.js
+  index.html
+  limpiar_db.js
+  staff.html
+  styles.css
+routes/
+  inventory.js
+  metrics.js
+  metrics.routes.js
+  products.js
+  users.js
+scripts/
+  limpiar_db.js
+  seed_inventory.js
+src/
+  config/
+    db.js
+  controllers/
+    inventory.controller.js
+    metrics.controller.js
+  middlewares/
+    auth.middleware.js
+  routes/
+    inventory.routes.js
+    metrics.routes.js
+  services/
+    metrics.service.js
+    socket.service.js
+  app.js
+package.json
+server.js
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="middleware/auth.js">
+const jwt = require('jsonwebtoken');
+
+const JWT_SECRET = process.env.JWT_SECRET || 'secreto_super_seguro_cambiar_en_produccion';
+
+const verificarToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+  
+  if (!token) return res.sendStatus(401);
+
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) return res.sendStatus(403);
+    req.user = user;
+    next();
+  });
+};
+
+const permitirRoles = (...roles) => {
+  return (req, res, next) => {
+    if (!roles.includes(req.user.role)) return res.sendStatus(403);
+    next();
+  };
+};
+
+const isAdmin = (req, res, next) => {
+  if (req.user && req.user.role === 'admin') {
+    next();
+  } else {
+    return res.status(403).json({ 
+      success: false, 
+      message: '⛔ Acceso denegado: Se requieren privilegios de administrador.' 
+    });
+  }
+};
+
+module.exports = { verificarToken, permitirRoles, isAdmin, JWT_SECRET };
+</file>
+
+<file path="models/Inventory.js">
+const mongoose = require('mongoose');
+
+const InventorySchema = new mongoose.Schema({
+  nombre: { type: String, required: true },
+  cantidad: { type: Number, default: 0 },
+  unidad: { type: String, default: 'unidad' },
+  seccion: { type: String, default: 'general' },
+  minimo: { type: Number, default: 5 },
+  costoUnitario: { type: Number, default: 0 }, // Costo promedio ponderado
+  precio: { type: Number, default: 0 }, // Precio de venta o referencia
+  proveedor: { type: mongoose.Schema.Types.ObjectId, ref: 'Supplier' },
+  ultimaActualizacion: { type: Date, default: Date.now }
+});
+
+InventorySchema.statics.obtenerFaltantes = function() {
+  return this.find({ $expr: { $lt: ["$cantidad", "$minimo"] } });
+};
+
+module.exports = mongoose.model('Inventory', InventorySchema);
+</file>
+
+<file path="models/Merma.js">
+const mongoose = require('mongoose');
+
+const MermaSchema = new mongoose.Schema({
+  insumo: { type: mongoose.Schema.Types.ObjectId, ref: 'Inventory', required: true },
+  cantidad: { type: Number, required: true },
+  motivo: { 
+    type: String, 
+    enum: ['CADUCIDAD', 'ERROR_COCINA', 'ACCIDENTE', 'ROBO', 'DEGUSTACION'], 
+    required: true 
+  },
+  usuario: { type: String }, // Quién reportó
+  fecha: { type: Date, default: Date.now },
+  costoPerdido: { type: Number } // Snapshot del costo en ese momento
+});
+
+module.exports = mongoose.model('Merma', MermaSchema);
+</file>
+
+<file path="models/Pedido.js">
+const mongoose = require('mongoose');
+
+const OrderSchema = new mongoose.Schema({
+  numeroOrden: { type: Number, required: true },
+  cliente: { type: String, required: true },
+  tipo: { type: String, required: true }, // 'Comer aqui' | 'Para llevar'
+  items: [], 
+  total: { type: Number, required: true },
+  dispositivo: String,
+  fecha: { type: Date, default: Date.now },
+  
+  // Máquina de Estados
+  status: {
+    type: String,
+    enum: ['PENDING_PAYMENT', 'IN_KITCHEN', 'PREPARING', 'READY', 'COMPLETED'],
+    default: 'PENDING_PAYMENT',
+    index: true
+  },
+  
+  // Auditoría de tiempos
+  history: [
+    {
+      status: String,
+      timestamp: { type: Date, default: Date.now },
+      user: String // ID o Rol del usuario que hizo el cambio
+    }
+  ]
+});
+
+module.exports = mongoose.model('Pedido', OrderSchema);
+</file>
+
+<file path="models/Product.js">
+const mongoose = require('mongoose');
+
+const ProductSchema = new mongoose.Schema({
+  id: { type: String, required: true, unique: true }, // ID legible (ej. "h_hawaiana")
+  nombre: { type: String, required: true },
+  categoria: { type: String, required: true, enum: ['hamburguesas', 'hotdogs', 'bebidas', 'snacks', 'extras'] }, 
+  precios: { type: Object, default: {} }, // { "1": 70, "2": 120, "3": 160 }
+  precioUnitario: { type: Number, default: 0 }, // Para items sin promo volumen
+  costoProduccion: { type: Number, default: 0 }, // Costo calculado de insumos (Costo Real)
+  imagen: { type: String }, // URL de la imagen para el menú digital
+  ingredientes: [String], // ["Cebolla", "Tomate", "Lechuga"] (Ingredientes base quitables)
+  adicionales: [{ nombre: String, precio: Number }], // [{"nombre": "Queso Extra", "precio": 10}]
+  
+  // Receta técnica: Vincula el producto con el inventario real
+  receta: [{
+    insumo: { type: mongoose.Schema.Types.ObjectId, ref: 'Inventory' },
+    cantidad: Number // Cuánto se gasta por unidad (ej. 0.150 kg de carne)
+  }],
+  costoEstimado: { type: Number, default: 0 } // Se calcula sumando (insumo.costo * cantidad)
+});
+
+module.exports = mongoose.model('Product', ProductSchema);
+</file>
+
+<file path="models/Sale.js">
+const mongoose = require('mongoose');
+
+const SaleSchema = new mongoose.Schema({
+  fecha: { type: Date, default: Date.now },
+  totalVenta: { type: Number, required: true }, // Ingreso Bruto
+  totalCosto: { type: Number, required: true }, // Costo de lo vendido (COGS)
+  gananciaNeta: { type: Number, required: true }, // Venta - Costo
+  metodoPago: { type: String, enum: ['efectivo', 'tarjeta'], default: 'efectivo' },
+  usuario: { type: String }, // Quién realizó la venta (Cajero)
+  
+  // Desglose detallado para analítica
+  items: [{
+    productoId: { type: mongoose.Schema.Types.ObjectId, ref: 'Product' },
+    nombre: String,
+    categoria: String,
+    cantidad: Number,
+    precioUnitario: Number, // Precio al momento de la venta
+    costoUnitario: Number   // Costo al momento de la venta
+  }]
+});
+
+// Índices para acelerar reportes por fecha y categoría
+SaleSchema.index({ fecha: 1 });
+SaleSchema.index({ "items.categoria": 1 });
+
+module.exports = mongoose.model('Sale', SaleSchema);
+</file>
+
+<file path="models/StockManager.js">
+const Inventory = require('../models/Inventory');
+const Product = require('../models/Product');
+const Pedido = require('../models/Pedido');
+const Merma = require('../models/Merma');
+
+// Función auxiliar para normalizar texto (quitar acentos y mayúsculas)
+const normalize = (str) => {
+  return str ? str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "") : "";
+};
+
+/**
+ * SERVICIO DE GESTIÓN DE INVENTARIO Y MÉTRICAS
+ */
+const StockManager = {
+
+  // 1. VINCULACIÓN AUTOMÁTICA (Descontar stock al vender)
+  // Se debe llamar cuando el pedido pasa a 'IN_KITCHEN' o 'COMPLETED'
+  procesarSalidaDeStock: async (pedido) => {
+    for (const item of pedido.items) {
+      // Buscar el producto real para obtener su receta
+      // IMPORTANTE: Usamos populate para traer el nombre del insumo y poder comparar con los "mods"
+      const productoDB = await Product.findOne({ id: item.id }).populate('receta.insumo');
+      
+      if (productoDB && productoDB.receta && productoDB.receta.length > 0) {
+        const cantidadVendida = item.qty;
+        const mods = item.mods || []; // Array de strings ej: ["Sin Cebolla", "Extra Jitomate"]
+
+        for (const ingrediente of productoDB.receta) {
+          if (!ingrediente.insumo) continue; // Si el insumo fue borrado de la BD, saltar
+
+          let cantidadPorUnidad = ingrediente.cantidad;
+          const nombreInsumo = normalize(ingrediente.insumo.nombre);
+
+          // --- LÓGICA DE PREFERENCIAS DEL CLIENTE ---
+          // Buscamos si alguna modificación afecta a este ingrediente
+          const modSin = mods.find(m => {
+            const texto = normalize(m);
+            return texto.includes(`sin ${nombreInsumo}`) || texto.includes(`no ${nombreInsumo}`) || texto.includes(`0 ${nombreInsumo}`);
+          });
+
+          const modExtra = mods.find(m => {
+            const texto = normalize(m);
+            return texto.includes(`extra ${nombreInsumo}`) || texto.includes(`mas ${nombreInsumo}`) || texto.includes(`con ${nombreInsumo}`);
+          });
+
+          if (modSin) {
+            cantidadPorUnidad = 0; // No descontar nada
+          } else if (modExtra) {
+            cantidadPorUnidad = cantidadPorUnidad * 2; // Descontar doble (ajustable según negocio)
+          }
+
+          const descuentoTotal = cantidadPorUnidad * cantidadVendida;
+          
+          // Solo actualizar si hay algo que descontar
+          if (descuentoTotal > 0) {
+            await Inventory.findByIdAndUpdate(ingrediente.insumo._id, {
+              $inc: { cantidad: -descuentoTotal }
+            });
+          }
+        }
+      }
+    }
+  },
+
+  // 2. REGISTRAR MERMA
+  registrarMerma: async (insumoId, cantidad, motivo, usuario) => {
+    const insumo = await Inventory.findById(insumoId);
+    if (!insumo) throw new Error("Insumo no encontrado");
+
+    const costoPerdido = insumo.costoUnitario * cantidad;
+
+    // Crear registro de merma
+    await Merma.create({
+      insumo: insumoId,
+      cantidad,
+      motivo,
+      usuario,
+      costoPerdido
+    });
+
+    // Descontar del inventario
+    insumo.cantidad -= cantidad;
+    await insumo.save();
+  },
+
+  // 3. GENERAR INSIGHTS DE VENTA (Métricas)
+  obtenerMetricasAvanzadas: async (fechaInicio, fechaFin) => {
+    const pipeline = [
+      {
+        $match: {
+          fecha: { $gte: new Date(fechaInicio), $lte: new Date(fechaFin) },
+          status: 'COMPLETED' // Solo ventas reales
+        }
+      },
+      { $unwind: "$items" }, // Desglosar items
+      {
+        $group: {
+          _id: "$items.id", // Agrupar por ID de producto (ej. "h_sencilla")
+          nombre: { $first: "$items.nombre" },
+          totalVendido: { $sum: "$items.qty" },
+          ingresoTotal: { $sum: { $multiply: ["$items.qty", "$items.precioUnitario"] } }, // Nota: Requiere ajustar modelo Pedido para guardar precio snapshot
+          horasVenta: { $push: { $hour: "$fecha" } } // Guardar horas para mapa de calor
+        }
+      },
+      { $sort: { totalVendido: -1 } }
+    ];
+
+    const reporte = await Pedido.aggregate(pipeline);
+    
+    // Post-procesamiento para Insights
+    return reporte.map(prod => {
+      // Calcular hora pico (moda)
+      const horasMap = {};
+      let maxFrecuencia = 0;
+      let horaPico = 0;
+      prod.horasVenta.forEach(h => {
+        horasMap[h] = (horasMap[h] || 0) + 1;
+        if (horasMap[h] > maxFrecuencia) {
+          maxFrecuencia = horasMap[h];
+          horaPico = h;
+        }
+      });
+
+      return {
+        producto: prod.nombre,
+        unidades: prod.totalVendido,
+        horaPico: `${horaPico}:00`,
+        analisis: StockManager.analizarRendimiento(prod.totalVendido)
+      };
+    });
+  },
+
+  analizarRendimiento: (cantidad) => {
+    if (cantidad > 50) return "🔥 ESTRELLA (Alta rotación)";
+    if (cantidad > 20) return "✅ CONSTANTE";
+    return "⚠️ LENTO (Considerar promoción)";
+  }
+};
+
+module.exports = StockManager;
+</file>
+
+<file path="models/Supplier.js">
+const mongoose = require('mongoose');
+
+const SupplierSchema = new mongoose.Schema({
+  nombre: { type: String, required: true },
+  contacto: String,
+  telefono: String,
+  diasEntrega: [String], // ['Lunes', 'Jueves']
+  categoria: String // 'Carniceria', 'Abarrotes'
+});
+
+module.exports = mongoose.model('Supplier', SupplierSchema);
+</file>
+
+<file path="models/Usuario.js">
+const mongoose = require('mongoose');
+
+const UsuarioSchema = new mongoose.Schema({
+  username: { type: String, required: true, unique: true },
+  password: { type: String, required: true },
+  role: { type: String, enum: ['admin', 'cashier', 'cook'], default: 'cashier' }
+});
+
+module.exports = mongoose.model('Usuario', UsuarioSchema);
+</file>
+
+<file path="public/admin.html">
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - Food Manager</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        /* Estilos específicos para el Admin Panel */
+        .dashboard-layout { display: grid; grid-template-columns: 250px 1fr; min-height: 100vh; }
+        .sidebar { background: #2c0b0b; padding: 20px; border-right: 2px solid var(--accent); }
+        .main-content { padding: 30px; overflow-y: auto; }
+        .nav-btn { 
+            display: block; width: 100%; padding: 15px; margin-bottom: 10px; 
+            background: rgba(255,255,255,0.1); color: white; border: none; 
+            cursor: pointer; text-align: left; border-radius: 8px; font-size: 1.1rem;
+        }
+        .nav-btn.active { background: var(--accent); color: #3e2723; font-weight: bold; }
+        .nav-btn:hover:not(.active) { background: rgba(255,255,255,0.2); }
+        
+        .metric-card { background: var(--card-bg); padding: 20px; border-radius: 10px; margin-bottom: 15px; border: 1px solid #d32f2f; }
+        .stat-value { font-size: 2rem; font-weight: bold; color: var(--accent); }
+        .stat-label { color: #ffecb3; font-size: 0.9rem; }
+
+        /* --- RESPONSIVE MOBILE --- */
+        @media (max-width: 768px) {
+            .dashboard-layout { display: block; } /* Quitar grid lateral */
+            .sidebar { 
+                border-right: none; border-bottom: 2px solid var(--accent); 
+                padding: 10px; display: flex; flex-wrap: wrap; gap: 5px; justify-content: center;
+            }
+            .sidebar h2 { width: 100%; font-size: 1.2rem; margin-bottom: 10px; }
+            .nav-btn { width: auto; display: inline-block; padding: 8px 15px; font-size: 0.9rem; margin-bottom: 0; }
+            
+            .main-content { padding: 15px; }
+            .control-group { flex-direction: column; align-items: stretch; }
+            .control-group input, .control-group button { width: 100%; margin-bottom: 5px; }
+            
+            .admin-table { display: block; overflow-x: auto; white-space: nowrap; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Login Screen -->
+    <div id="login-screen" class="full-screen-step">
+        <h1>🛡️ Acceso Admin</h1>
+        <input type="text" id="username" class="input-name" placeholder="Usuario (admin)">
+        <input type="password" id="password" class="input-name" placeholder="Contraseña">
+        <button class="big-btn" onclick="login()">Entrar</button>
+        <p id="login-error" style="color: #ff5252; display: none;">Credenciales incorrectas</p>
+    </div>
+
+    <!-- Dashboard -->
+    <div id="dashboard" class="dashboard-layout hidden">
+        <div class="sidebar">
+            <h2 style="color: var(--accent); text-align: center;">🍔 MANAGER</h2>
+            <button class="nav-btn active" onclick="showTab('metrics')">📊 Métricas de Venta</button>
+            <button class="nav-btn" onclick="showTab('inventory')">📦 Inventario & Costos</button>
+            <button class="nav-btn" onclick="logout()" style="margin-top: 50px; border: 1px solid #ff5252;">🚪 Cerrar Sesión</button>
+        </div>
+
+        <div class="main-content">
+            <!-- Tab: Métricas -->
+            <div id="tab-metrics">
+                <h1>📈 Rendimiento del Negocio</h1>
+                <div class="control-group" style="justify-content: flex-start; gap: 10px; margin-bottom: 20px;">
+                    <input type="date" id="date-start" style="width: auto;">
+                    <input type="date" id="date-end" style="width: auto;">
+                    <button class="btn-order" style="font-size: 1rem; padding: 10px 20px;" onclick="loadMetrics()">Filtrar</button>
+                </div>
+                
+                <div id="metrics-container" class="menu-grid">
+                    <!-- Se llena con JS -->
+                    <p>Cargando datos...</p>
+                </div>
+
+                <!-- NUEVAS GRÁFICAS FINANCIERAS -->
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-top: 30px;">
+                    <div class="metric-card"><canvas id="financialChart"></canvas></div>
+                    <div class="metric-card"><canvas id="categoryChart"></canvas></div>
+                    <div class="metric-card"><canvas id="topProductsChart"></canvas></div>
+                </div>
+            </div>
+
+            <!-- Tab: Inventario -->
+            <div id="tab-inventory" class="hidden">
+                <h1>📦 Control de Stock</h1>
+                <div style="margin-bottom: 20px;">
+                    <button class="btn-order" style="background: #4caf50; color: white;" onclick="openInventoryModal()">+ Agregar Insumo</button>
+                    <button class="btn-order" style="font-size: 1rem;" onclick="loadInventory()">🔄 Actualizar Tabla</button>
+                </div>
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>Insumo</th>
+                            <th>Stock Actual</th>
+                            <th>Costo Unit.</th>
+                            <th>Estado</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="inventory-list">
+                        <!-- Se llena con JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Modal Inventario -->
+    <div id="modal-inventory" class="modal">
+        <div class="modal-content">
+            <h2 id="modal-title">Nuevo Insumo</h2>
+            <input type="hidden" id="inv-id">
+            <input type="text" id="inv-nombre" placeholder="Nombre (ej. Pan, Carne)">
+            <input type="number" id="inv-cantidad" placeholder="Cantidad Actual">
+            <input type="text" id="inv-unidad" placeholder="Unidad (kg, pza, lt)">
+            <input type="number" id="inv-costo" placeholder="Costo Unitario ($)">
+            <input type="number" id="inv-minimo" placeholder="Stock Mínimo (Alerta)">
+            <button class="big-btn" onclick="saveInventory()" style="font-size: 1rem; padding: 10px;">Guardar</button>
+            <button class="btn-order" onclick="closeModal()" style="background: #777; margin-top: 10px;">Cancelar</button>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = '/api';
+        let token = localStorage.getItem('token');
+
+        // --- AUTH ---
+        if(token) document.getElementById('login-screen').classList.add('hidden'), document.getElementById('dashboard').classList.remove('hidden'), loadMetrics();
+
+        async function login() {
+            const u = document.getElementById('username').value;
+            const p = document.getElementById('password').value;
+            try {
+                const res = await fetch('/login', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ username: u, password: p })
+                });
+                const data = await res.json();
+                if(data.access_token) {
+                    token = data.access_token;
+                    localStorage.setItem('token', token);
+                    location.reload();
+                } else {
+                    document.getElementById('login-error').style.display = 'block';
+                }
+            } catch(e) { alert('Error de conexión'); }
+        }
+
+        function logout() { localStorage.removeItem('token'); location.reload(); }
+
+        // --- TABS ---
+        function showTab(tab) {
+            document.getElementById('tab-metrics').classList.add('hidden');
+            document.getElementById('tab-inventory').classList.add('hidden');
+            document.getElementById(`tab-${tab}`).classList.remove('hidden');
+            
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+            event.target.classList.add('active');
+
+            if(tab === 'metrics') loadMetrics();
+            if(tab === 'inventory') loadInventory();
+        }
+
+        // --- METRICS LOGIC ---
+        async function loadMetrics() {
+            const start = document.getElementById('date-start').value;
+            const end = document.getElementById('date-end').value;
+            const res = await fetch(`${API_URL}/metrics/dashboard?start=${start}&end=${end}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const data = await res.json();
+            
+            const container = document.getElementById('metrics-container');
+            container.innerHTML = data.map(m => `
+                <div class="metric-card">
+                    <div class="item-title">${m.producto}</div>
+                    <div class="stat-value">${m.unidades} <span style="font-size: 1rem;">vendidos</span></div>
+                    <div class="stat-label">Hora Pico: ${m.horaPico}</div>
+                    <div style="margin-top: 10px; font-weight: bold; color: #fff;">${m.analisis}</div>
+                </div>
+            `).join('');
+
+            // Cargar las nuevas gráficas visuales
+            loadCharts(start, end);
+        }
+
+        // --- INVENTORY LOGIC ---
+        async function loadInventory() {
+            try {
+                const res = await fetch(`${API_URL}/inventory?t=${Date.now()}`, { headers: { 'Authorization': `Bearer ${token}` } });
+                const data = await res.json();
+                console.log("📦 Datos recibidos del servidor:", data); // LOG PARA DEPURAR
+                
+                if (!res.ok) throw new Error(data.error || "Error al cargar inventario");
+                if (!Array.isArray(data)) throw new Error("Formato de datos incorrecto");
+
+                const tbody = document.getElementById('inventory-list');
+                
+                if (data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color: #ffecb3;">📭 El inventario está vacío. Agrega tu primer insumo.</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = data.map(i => {
+                    const statusClass = i.cantidad < i.minimo ? 'badge-danger' : 'badge-success';
+                    const statusText = i.cantidad < i.minimo ? '⚠️ BAJO STOCK' : 'OK';
+                    return `
+                        <tr>
+                            <td>${i.nombre}</td>
+                            <td>${i.cantidad} ${i.unidad}</td>
+                            <td>$${i.costoUnitario}</td>
+                            <td><span class="badge ${statusClass}">${statusText}</span></td>
+                            <td>
+                                <button onclick='editInventory(${JSON.stringify(i)})' style="cursor:pointer;">✏️</button>
+                                <button onclick='deleteInventory("${i._id}")' style="cursor:pointer; color:red;">🗑️</button>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+            } catch (e) {
+                console.error(e);
+                // No alertamos aquí para no ser molestos al cargar, pero sí en consola
+            }
+        }
+
+        // --- INVENTORY CRUD ---
+        function openInventoryModal() {
+            document.getElementById('inv-id').value = '';
+            document.getElementById('inv-nombre').value = '';
+            document.getElementById('inv-cantidad').value = '';
+            document.getElementById('inv-unidad').value = 'unidad';
+            document.getElementById('inv-costo').value = '';
+            document.getElementById('inv-minimo').value = 5;
+            document.getElementById('modal-title').innerText = 'Nuevo Insumo';
+            document.getElementById('modal-inventory').style.display = 'flex';
+        }
+
+        function editInventory(item) {
+            document.getElementById('inv-id').value = item._id;
+            document.getElementById('inv-nombre').value = item.nombre;
+            document.getElementById('inv-cantidad').value = item.cantidad;
+            document.getElementById('inv-unidad').value = item.unidad;
+            document.getElementById('inv-costo').value = item.costoUnitario;
+            document.getElementById('inv-minimo').value = item.minimo;
+            document.getElementById('modal-title').innerText = 'Editar Insumo';
+            document.getElementById('modal-inventory').style.display = 'flex';
+        }
+
+        function closeModal() { document.getElementById('modal-inventory').style.display = 'none'; }
+
+        async function saveInventory() {
+            const id = document.getElementById('inv-id').value;
+            const nombre = document.getElementById('inv-nombre').value;
+            
+            if (!nombre.trim()) return alert("⚠️ El nombre del insumo es obligatorio");
+
+            const data = {
+                nombre: nombre,
+                cantidad: Number(document.getElementById('inv-cantidad').value) || 0,
+                unidad: document.getElementById('inv-unidad').value,
+                costoUnitario: Number(document.getElementById('inv-costo').value) || 0,
+                minimo: Number(document.getElementById('inv-minimo').value) || 5
+            };
+            
+            const method = id ? 'PUT' : 'POST';
+            const url = id ? `${API_URL}/inventory/${id}` : `${API_URL}/inventory`;
+
+            try {
+                const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(data) });
+                
+                // Intentar leer JSON, si falla leer texto (para errores inesperados)
+                let result;
+                try { result = await res.json(); } catch(e) { result = { error: res.statusText }; }
+
+                if (res.ok) {
+                    closeModal(); 
+                    loadInventory();
+                } else {
+                    alert('🔴 Error: ' + (result.error || 'Error desconocido'));
+                    if (res.status === 401 || res.status === 403) logout(); // Si expiró la sesión, sacar al usuario
+                }
+            } catch (e) {
+                alert('🔴 Error de conexión: ' + e.message);
+                console.error(e);
+            }
+        }
+
+        async function deleteInventory(id) {
+            if(confirm('¿Eliminar este insumo?')) {
+                await fetch(`${API_URL}/inventory/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
+                loadInventory();
+            }
+        }
+
+        // --- NUEVAS FUNCIONES DE GRÁFICAS (Chart.js) ---
+        let chartFinanzas, chartCategorias, chartTop;
+
+        async function loadCharts(start, end) {
+            const headers = { 'Authorization': `Bearer ${token}` };
+            const query = `?start=${start}&end=${end}`;
+
+            // 1. Datos Financieros
+            const resFin = await fetch(`${API_URL}/metrics/financials${query}`, { headers });
+            const finData = await resFin.json();
+            
+            renderFinancialChart(finData);
+
+            // 2. Datos Categorías
+            const resCat = await fetch(`${API_URL}/metrics/categories${query}`, { headers });
+            const catData = await resCat.json();
+            renderCategoryChart(catData);
+
+            // 3. Top Productos
+            const resTop = await fetch(`${API_URL}/metrics/top-products${query}`, { headers });
+            const topData = await resTop.json();
+            renderTopChart(topData);
+        }
+
+        function renderFinancialChart(data) {
+            const ctx = document.getElementById('financialChart').getContext('2d');
+            if(chartFinanzas) chartFinanzas.destroy();
+
+            chartFinanzas = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['Ingresos', 'Costos', 'Ganancia Neta'],
+                    datasets: [{
+                        label: 'Desempeño Financiero ($)',
+                        data: [data.ingresoTotal, data.costoTotal, data.gananciaNeta],
+                        backgroundColor: ['#4caf50', '#f44336', '#ffc107']
+                    }]
+                },
+                options: { responsive: true, plugins: { title: { display: true, text: 'Rentabilidad Real' } } }
+            });
+        }
+
+        function renderCategoryChart(data) {
+            const ctx = document.getElementById('categoryChart').getContext('2d');
+            if(chartCategorias) chartCategorias.destroy();
+
+            chartCategorias = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: data.map(d => d._id.toUpperCase()),
+                    datasets: [{
+                        data: data.map(d => d.cantidadVendida),
+                        backgroundColor: ['#ff9800', '#2196f3', '#9c27b0', '#00bcd4']
+                    }]
+                },
+                options: { responsive: true, plugins: { title: { display: true, text: 'Ventas por Categoría' } } }
+            });
+        }
+
+        function renderTopChart(data) {
+            const ctx = document.getElementById('topProductsChart').getContext('2d');
+            if(chartTop) chartTop.destroy();
+
+            chartTop = new Chart(ctx, {
+                type: 'bar',
+                indexAxis: 'y', // Gráfica horizontal
+                data: {
+                    labels: data.map(d => d._id),
+                    datasets: [{
+                        label: 'Unidades Vendidas',
+                        data: data.map(d => d.unidades),
+                        backgroundColor: '#e91e63'
+                    }]
+                },
+                options: { responsive: true, plugins: { title: { display: true, text: 'Top 5 Productos' } } }
+            });
+        }
+    </script>
+</body>
+</html>
+</file>
+
+<file path="public/admin.js">
+const API_URL = '/api';
+let inventarioCache = []; // Cache local para edición rápida
+
+// --- A. UTILIDAD DE SEGURIDAD (AuthFetch) ---
+async function authFetch(url, options = {}) {
+    const token = localStorage.getItem('token');
+    
+    if (!token) {
+        console.warn("⛔ No hay token, redirigiendo...");
+        window.location.href = '/'; 
+        return null;
+    }
+
+    const headers = {
+        'Content-Type': 'application/json',
+        ...options.headers,
+        'Authorization': `Bearer ${token}`
+    };
+
+    try {
+        const response = await fetch(url, { ...options, headers });
+
+        // Manejo automático de sesión expirada
+        if (response.status === 401 || response.status === 403) {
+            localStorage.removeItem('token');
+            localStorage.removeItem('role');
+            alert("⚠️ Tu sesión ha expirado. Por favor ingresa nuevamente.");
+            window.location.href = '/';
+            return null;
+        }
+
+        return response;
+    } catch (error) {
+        console.error("🔴 Error de Red:", error);
+        alert("Error de conexión con el servidor.");
+        throw error;
+    }
+}
+
+// --- B. FUNCIONES CRUD ---
+
+// 1. Cargar Inventario (GET)
+async function cargarInventario() {
+    try {
+        const res = await authFetch(`${API_URL}/inventory`);
+        if (!res || !res.ok) return;
+
+        inventarioCache = await res.json();
+        const tbody = document.querySelector('#inventory-table tbody');
+        
+        if (!tbody) return;
+
+        tbody.innerHTML = inventarioCache.map(item => `
+            <tr>
+                <td><strong>${item.nombre}</strong></td>
+                <td>${item.cantidad}</td>
+                <td>${item.unidad}</td>
+                <td>${item.seccion || 'General'}</td>
+                <td>$${item.precio || 0}</td>
+                <td>
+                    <button class="btn btn-sm btn-outline-primary me-2" onclick="prepararEdicion('${item._id}')">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="btn btn-sm btn-outline-danger" onclick="eliminarProducto('${item._id}')">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+    } catch (error) {
+        console.error("Error cargando inventario:", error);
+    }
+}
+
+// 2. Eliminar Producto (DELETE)
+async function eliminarProducto(id) {
+    if (!confirm("¿Estás seguro de eliminar este producto del inventario?")) return;
+
+    try {
+        const res = await authFetch(`${API_URL}/inventory/${id}`, {
+            method: 'DELETE'
+        });
+
+        if (res && res.ok) {
+            cargarInventario(); // Recargar tabla
+        } else {
+            alert("❌ No se pudo eliminar el producto.");
+        }
+    } catch (error) {
+        console.error(error);
+    }
+}
+
+// 3. Guardar Producto (POST/PUT)
+async function guardarProducto() {
+    const id = document.getElementById('inv-id').value;
+    
+    const data = {
+        nombre: document.getElementById('inv-name').value,
+        cantidad: document.getElementById('inv-qty').value,
+        unidad: document.getElementById('inv-unit').value,
+        seccion: document.getElementById('inv-sec').value,
+        minimo: document.getElementById('inv-min').value,
+        precio: document.getElementById('inv-price').value
+    };
+
+    if (!data.nombre || !data.cantidad) return alert("⚠️ Nombre y Cantidad son obligatorios");
+
+    const method = id ? 'PUT' : 'POST';
+    const url = id ? `${API_URL}/inventory/${id}` : `${API_URL}/inventory`;
+
+    try {
+        const res = await authFetch(url, {
+            method: method,
+            body: JSON.stringify(data)
+        });
+
+        if (res && res.ok) {
+            // Cerrar Modal usando Bootstrap API
+            const modalEl = document.getElementById('modal-inventory');
+            const modal = bootstrap.Modal.getInstance(modalEl);
+            if (modal) modal.hide();
+            
+            cargarInventario(); // Recargar tabla
+        } else {
+            alert("❌ Error al guardar el producto.");
+        }
+    } catch (error) {
+        console.error(error);
+    }
+}
+
+// 4. Preparar Modal para Edición
+function prepararEdicion(id) {
+    const item = inventarioCache.find(i => i._id === id);
+    if (!item) return;
+
+    document.getElementById('inv-id').value = item._id;
+    document.getElementById('inv-name').value = item.nombre;
+    document.getElementById('inv-qty').value = item.cantidad;
+    document.getElementById('inv-unit').value = item.unidad;
+    document.getElementById('inv-sec').value = item.seccion;
+    document.getElementById('inv-min').value = item.minimo;
+    document.getElementById('inv-price').value = item.precio || 0;
+    
+    document.getElementById('modal-inv-title').innerText = 'Editar Producto';
+    
+    const modal = new bootstrap.Modal(document.getElementById('modal-inventory'));
+    modal.show();
+}
+
+function abrirModalNuevo() {
+    document.getElementById('inv-id').value = '';
+    document.getElementById('inv-name').value = '';
+    document.getElementById('inv-qty').value = '';
+    document.getElementById('modal-inv-title').innerText = 'Nuevo Producto';
+    
+    const modal = new bootstrap.Modal(document.getElementById('modal-inventory'));
+    modal.show();
+}
+
+// Exponer funciones al HTML
+window.cargarInventario = cargarInventario;
+window.eliminarProducto = eliminarProducto;
+window.guardarProducto = guardarProducto;
+window.prepararEdicion = prepararEdicion;
+window.abrirModalNuevo = abrirModalNuevo;
+window.authFetch = authFetch; // Útil si otros scripts lo necesitan
+</file>
+
+<file path="public/index.html">
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Momoy's Burger - Menú Digital</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <script src="/socket.io/socket.io.js"></script>
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+
+    <!-- PROBLEMA 1: Navbar Correcto -->
+    <nav class="navbar navbar-light bg-white shadow-sm fixed-top px-3">
+        <div class="container-fluid d-flex justify-content-between align-items-center">
+            <a class="navbar-brand fw-bold text-primary" href="#">🍔 Momoy's Burger</a>
+            <button class="btn btn-outline-secondary btn-sm ms-auto" onclick="abrirLogin()">
+                <i class="fas fa-lock"></i> Staff
+            </button>
+        </div>
+    </nav>
+    <div style="margin-top: 70px;"></div> <!-- Espaciador para el navbar fixed -->
+
+    <!-- PROBLEMA 2: WIZARD DE 5 PASOS -->
+    
+    <!-- PASO 1: BIENVENIDA Y NOMBRE -->
+    <div id="wizard-step-1" class="wizard-step container text-center mt-5">
+        <h1>🍔 Momoy's Burger</h1>
+        <p class="subtitle">¡Bienvenido!</p>
+        <br>
+        <p style="font-size: 1.2rem;">¿Cómo te llamas?</p>
+        <div class="d-flex justify-content-center">
+            <input type="text" id="input-user-name" class="form-control w-75 mb-3" placeholder="Escribe tu nombre aquí">
+        </div>
+        <button class="btn-primary-client" onclick="wizardPaso1()">Continuar</button>
+    </div>
+
+    <!-- PASO 2: TIPO DE SERVICIO -->
+    <div id="wizard-step-2" class="wizard-step container text-center mt-5 d-none">
+        <h1>Hola, <span id="display-name"></span></h1>
+        <p class="mb-4">¿Dónde comerás hoy?</p>
+        <div class="d-grid gap-3">
+            <button class="btn-primary-client" onclick="wizardPaso2('Comer aqui')">🍽️ Comer aquí</button>
+            <button class="btn-primary-client" style="background-color: #7f8c8d !important;" onclick="wizardPaso2('Para llevar')">🥡 Para llevar</button>
+        </div>
+    </div>
+
+    <!-- PASO 3: MENÚ Y SELECCIÓN -->
+    <div id="wizard-step-3" class="wizard-step container mt-3 d-none">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h2 class="h4 m-0">Menú</h2>
+            <button class="btn btn-sm btn-outline-primary" onclick="mostrarPaso(4)">
+                Ver Carrito <span class="badge bg-danger rounded-pill" id="cart-count-badge">0</span>
+            </button>
+        </div>
+        <p class="text-muted small" id="menu-subtitle">Selecciona tus productos</p>
+
+        <div id="menu-container" class="menu-grid">
+            <!-- Aquí se cargará el menú dinámicamente -->
+            <div style="text-align:center; width:100%;">Cargando menú...</div>
+        </div>
+
+        <!-- FAB para ir al carrito -->
+        <div class="fab-container" onclick="mostrarPaso(4)">
+            <i class="fas fa-shopping-cart fab-icon"></i>
+            <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" id="cart-count">0</span>
+        </div>
+    </div>
+
+    <!-- PASO 4: REVISIÓN DE CARRITO -->
+    <div id="wizard-step-4" class="wizard-step container mt-3 d-none">
+        <h2 class="mb-3"><i class="fas fa-receipt"></i> Tu Pedido</h2>
+        
+        <div id="cart-items-container" class="list-group list-group-flush mb-4">
+            <!-- Items del carrito -->
+        </div>
+
+        <div id="empty-cart-msg" class="text-center p-5 d-none">
+            <i class="fas fa-shopping-basket fa-3x text-muted mb-3"></i>
+            <p class="text-muted">Tu carrito está vacío</p>
+        </div>
+
+        <div class="card bg-light border-0 p-3 mb-3">
+            <div class="d-flex justify-content-between align-items-center">
+                <span class="h5 mb-0">Total:</span>
+                <span class="h4 mb-0 text-primary fw-bold" id="cart-total-display">$0</span>
+            </div>
+        </div>
+
+        <div class="d-grid gap-2">
+            <button class="btn btn-success py-3 fw-bold fs-5" onclick="enviarOrden()">
+                CONFIRMAR ORDEN <i class="fas fa-check-circle ms-2"></i>
+            </button>
+            <button class="btn btn-outline-secondary py-2" onclick="mostrarPaso(3)">
+                Seguir Pidiendo
+            </button>
+        </div>
+    </div>
+
+    <!-- PASO 5: ÉXITO -->
+    <div id="wizard-step-5" class="wizard-step container text-center mt-5 d-none">
+        <div class="mb-4 text-success">
+            <i class="fas fa-check-circle fa-5x"></i>
+        </div>
+        <h1 class="mb-3">¡Pedido Enviado!</h1>
+        <p class="lead">Tu número de orden es:</p>
+        <div class="display-1 fw-bold text-primary mb-4" id="success-order-id">#0</div>
+        <p class="alert alert-warning">
+            <i class="fas fa-cash-register"></i> Por favor pasa a caja a pagar.
+        </p>
+        <div id="active-orders-container" class="mt-4"></div>
+        <button class="btn btn-outline-primary mt-4" onclick="location.reload()">Hacer otro pedido</button>
+    </div>
+
+    <!-- Modal de Personalización de Producto -->
+    <div id="customModal" class="modal">
+        <div class="modal-content" style="text-align: left;">
+            <h2 id="custom-title" style="text-align: center; color: var(--card-bg);">Personalizar</h2>
+            
+            <div id="custom-ingredients" class="option-group">
+                <!-- Checkboxes de ingredientes -->
+            </div>
+            
+            <div id="custom-extras" class="option-group">
+                <!-- Checkboxes de extras -->
+            </div>
+
+            <div style="text-align: center; margin-top: 15px;">
+                <label>¿Cuántas así?</label>
+                <div class="control-group" style="justify-content: center; gap: 15px;">
+                    <button class="qty-btn" onclick="adjustCustomQty(-1)">-</button>
+                    <span class="qty-display" id="custom-qty">1</span>
+                    <button class="qty-btn" onclick="adjustCustomQty(1)">+</button>
+                </div>
+            </div>
+
+            <button class="btn-order" onclick="addCustomToCart()" style="width:100%; margin-top:15px;">AGREGAR AL PEDIDO</button>
+            <button onclick="document.getElementById('customModal').style.display='none'" style="width:100%; margin-top:10px; background:none; border:none; color:#999;">Cancelar</button>
+        </div>
+    </div>
+
+    <!-- Modal Login Staff -->
+    <div id="loginModal" class="modal">
+        <div class="modal-content">
+            <h2>Acceso Staff</h2>
+            <input type="text" id="login-user" placeholder="Usuario">
+            <input type="password" id="login-pass" placeholder="Contraseña">
+            <button class="btn-order" onclick="loginStaff()" style="width:100%; margin-top:10px;">ENTRAR</button>
+            <button onclick="document.getElementById('loginModal').style.display='none'" style="margin-top:15px; background:none; border:none; color:#999;">Cancelar</button>
+        </div>
+    </div>
+
+    <!-- Bootstrap Bundle JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <style>
+        /* CORRECCIÓN: Forzar que el modal de login esté encima de la bienvenida (z-3000) */
+        #loginModal {
+            z-index: 10000 !important;
+        }
+
+        /* Estilos FAB (Floating Action Button) */
+        .fab-container {
+            position: fixed; bottom: 20px; right: 20px;
+            background-color: var(--primary-color); color: white;
+            width: 65px; height: 65px; border-radius: 50%;
+            display: flex; justify-content: center; align-items: center;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.4); cursor: pointer; z-index: 1050;
+            transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .fab-container:active { transform: scale(0.9); }
+        .fab-icon { font-size: 1.8rem; }
+    </style>
+
+    <script>
+        const socket = io(); // Conexión tiempo real
+        let menuData = {};
+        let rawMenu = []; // Lista plana de productos para buscar fácil
+        
+        // 1. PERSISTENCIA DE DATOS: Cargar carrito desde localStorage al iniciar
+        let carrito = JSON.parse(localStorage.getItem('momoy_carrito')) || [];
+        
+        let usuarioNombre = localStorage.getItem('momoy_cliente'); // Recuperar nombre guardado
+        let ordenTipo = ''; // 'Comer aqui' o 'Para llevar'
+        let misPedidos = JSON.parse(localStorage.getItem('momoy_pedidos_activos') || '[]');
+
+        // --- LÓGICA DE FLUJO DE PANTALLAS ---
+        
+        // Al iniciar, decidir qué pantalla mostrar
+        window.onload = function() {
+            if (!usuarioNombre) {
+                mostrarPaso(1);
+            } else {
+                document.getElementById('display-name').innerText = usuarioNombre;
+                mostrarPaso(2); // Ir directo a tipo de orden si ya hay nombre
+                renderizarPedidosActivos();
+                sincronizarEstados();
+            }
+            actualizarBadges(); // Actualizar contador del FAB
+            cargarMenu(); // Cargar datos en segundo plano
+        };
+
+        // --- LÓGICA WIZARD ---
+        function mostrarPaso(numero) {
+            // Ocultar todos los pasos
+            document.querySelectorAll('.wizard-step').forEach(el => el.classList.add('d-none'));
+            // Mostrar el paso actual
+            document.getElementById(`wizard-step-${numero}`).classList.remove('d-none');
+            window.scrollTo(0,0);
+            
+            if(numero === 4) renderizarCarrito(); // Renderizar al entrar al paso 4
+        }
+
+        function wizardPaso1() {
+            const input = document.getElementById('input-user-name').value.trim();
+            if (!input) return alert("Por favor escribe tu nombre");
+            usuarioNombre = input;
+            localStorage.setItem('momoy_cliente', usuarioNombre); // Guardar en dispositivo
+            document.getElementById('display-name').innerText = usuarioNombre;
+            mostrarPaso(2);
+        }
+
+        function wizardPaso2(tipo) {
+            ordenTipo = tipo;
+            document.getElementById('menu-subtitle').innerText = `Pedido de ${usuarioNombre} - ${tipo}`;
+            mostrarPaso(3);
+        }
+
+        // Cargar menú al iniciar
+        function cargarMenu() {
+            fetch('/api/products') // Usamos la nueva ruta pública
+                .then(res => res.json())
+                .then(data => {
+                    menuData = data;
+                    // Aplanar menú para búsquedas rápidas
+                    rawMenu = [
+                        ...(data.hamburguesas || []),
+                        ...(data.extras || [])
+                    ];
+                    renderMenu();
+                });
+        }
+
+        function renderMenu() {
+            const container = document.getElementById('menu-container');
+            container.innerHTML = '';
+
+            // Renderizar Hamburguesas
+            if(menuData.hamburguesas) menuData.hamburguesas.forEach(item => {
+                const card = document.createElement('div');
+                card.className = 'card-product p-3';
+                card.innerHTML = `
+                    <div class="item-title">${item.nombre}</div>
+                    <div class="prices">1x$${item.precios[1]} | 2x$${item.precios[2]} | 3x$${item.precios[3]}</div>
+                    <div style="text-align: center; margin-top: 10px;">
+                        <button class="btn-primary-client btn-sm" onclick="openCustomModal('${item.id}')">AGREGAR</button>
+                        <div id="badge-${item.id}" style="color: #ffecb3; font-size: 0.9rem; margin-top: 5px;"></div>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+
+            // Renderizar Extras
+            if(menuData.extras) menuData.extras.forEach(item => {
+                const card = document.createElement('div');
+                card.className = 'card-product p-3';
+                card.style.borderColor = '#fff';
+                card.innerHTML = `
+                    <div class="item-title">🍟 ${item.nombre}</div>
+                    <div class="prices">$${item.precioUnitario} c/u</div>
+                    <div style="text-align: center; margin-top: 10px;">
+                        <button class="btn-primary-client btn-sm" onclick="openCustomModal('${item.id}')">AGREGAR</button>
+                        <div id="badge-${item.id}" style="color: #ffecb3; font-size: 0.9rem; margin-top: 5px;"></div>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+            actualizarBadges();
+        }
+
+        // --- LÓGICA DE PERSONALIZACIÓN ---
+        let currentProduct = null;
+        let tempQty = 1;
+
+        function openCustomModal(id) {
+            currentProduct = rawMenu.find(p => p.id === id);
+            tempQty = 1;
+            document.getElementById('custom-qty').innerText = tempQty;
+            document.getElementById('custom-title').innerText = currentProduct.nombre;
+            
+            // Render Ingredientes (Para quitar)
+            const ingDiv = document.getElementById('custom-ingredients');
+            ingDiv.innerHTML = ''; // Limpiar residuos anteriores
+            if (currentProduct.ingredientes && currentProduct.ingredientes.length > 0) {
+                ingDiv.style.display = 'block';
+                ingDiv.innerHTML = '<h4>Ingredientes (Desmarca para quitar):</h4>' + 
+                    currentProduct.ingredientes.map(ing => `
+                        <label class="checkbox-label">
+                            <input type="checkbox" checked value="${ing}" class="ing-check"> ${ing}
+                        </label>
+                    `).join('');
+            } else {
+                ingDiv.style.display = 'none';
+            }
+
+            // Render Extras (Para agregar)
+            const extDiv = document.getElementById('custom-extras');
+            extDiv.innerHTML = ''; // Limpiar residuos anteriores
+            if (currentProduct.adicionales && currentProduct.adicionales.length > 0) {
+                extDiv.style.display = 'block';
+                extDiv.innerHTML = '<h4>Extras (Marca para agregar):</h4>' + 
+                    currentProduct.adicionales.map(ext => `
+                        <label class="checkbox-label">
+                            <input type="checkbox" value="${ext.nombre}" data-price="${ext.precio}" class="ext-check"> ${ext.nombre} (+$${ext.precio})
+                        </label>
+                    `).join('');
+            } else {
+                extDiv.style.display = 'none';
+            }
+
+            document.getElementById('customModal').style.display = 'flex';
+        }
+
+        function adjustCustomQty(delta) {
+            tempQty += delta;
+            if (tempQty < 1) tempQty = 1;
+            document.getElementById('custom-qty').innerText = tempQty;
+        }
+
+        function addCustomToCart() {
+            const mods = [];
+            let extraPrice = 0;
+
+            // Detectar ingredientes quitados (unchecked)
+            document.querySelectorAll('.ing-check:not(:checked)').forEach(el => {
+                mods.push(`Sin ${el.value}`);
+            });
+
+            // Detectar extras agregados (checked)
+            document.querySelectorAll('.ext-check:checked').forEach(el => {
+                mods.push(`Extra ${el.value}`);
+                extraPrice += parseFloat(el.getAttribute('data-price'));
+            });
+
+            carrito.push({
+                id: currentProduct.id,
+                nombre: currentProduct.nombre,
+                qty: tempQty,
+                mods: mods,
+                extraPrice: extraPrice
+            });
+
+            guardarCarrito(); // Persistir cambios
+            document.getElementById('customModal').style.display = 'none';
+            actualizarBadges();
+            
+            // Feedback visual (opcional)
+            // alert("Agregado al carrito"); 
+        }
+
+        // --- LÓGICA DEL CARRITO (NUEVA) ---
+
+        // Guardar en localStorage
+        function guardarCarrito() {
+            localStorage.setItem('momoy_carrito', JSON.stringify(carrito));
+        }
+
+        // Función genérica solicitada (aunque usamos addCustomToCart para complejos)
+        function agregarAlCarrito(id, nombre, precio) {
+            const existente = carrito.find(item => item.id === id && item.mods.length === 0);
+            if (existente) {
+                existente.qty++;
+            } else {
+                carrito.push({ id, nombre, qty: 1, mods: [], extraPrice: 0, precioBase: precio });
+            }
+            guardarCarrito();
+            actualizarBadges();
+        }
+
+        // Renderizar HTML dentro del Modal Bootstrap
+        function renderizarCarrito() {
+            const container = document.getElementById('cart-items-container');
+            const emptyMsg = document.getElementById('empty-cart-msg');
+            
+            container.innerHTML = '';
+
+            if (carrito.length === 0) {
+                emptyMsg.classList.remove('d-none');
+                return;
+            }
+            emptyMsg.classList.add('d-none');
+
+            carrito.forEach((item, index) => {
+                // Calcular precio unitario real (base + extras)
+                // Nota: Para mostrar el precio correcto necesitamos saber el precio base si no está guardado.
+                // En este flujo, asumimos que calculamos el total globalmente, pero para visualización:
+                const product = rawMenu.find(p => p.id === item.id);
+                const precioBase = product ? (product.precios ? product.precios["1"] : product.precioUnitario) : 0;
+                const precioUnitarioTotal = precioBase + item.extraPrice;
+
+                const row = document.createElement('div');
+                row.className = 'list-group-item py-3';
+                row.innerHTML = `
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div class="me-3">
+                            <h6 class="mb-1 fw-bold">${item.nombre}</h6>
+                            <small class="text-muted d-block">$${precioUnitarioTotal} c/u</small>
+                            ${item.mods.length > 0 ? `<small class="text-danger" style="font-size:0.75rem">${item.mods.join(', ')}</small>` : ''}
+                        </div>
+                        <div class="d-flex align-items-center bg-light rounded p-1">
+                            <button class="btn btn-sm btn-outline-secondary border-0 fw-bold px-2" onclick="cambiarCantidad(${index}, -1)">-</button>
+                            <span class="mx-2 fw-bold" style="min-width:20px; text-align:center">${item.qty}</span>
+                            <button class="btn btn-sm btn-outline-secondary border-0 fw-bold px-2" onclick="cambiarCantidad(${index}, 1)">+</button>
+                        </div>
+                    </div>
+                    <div class="text-end mt-2">
+                        <button class="btn btn-link text-danger text-decoration-none p-0" style="font-size:0.8rem" onclick="eliminarItem(${index})">
+                            <i class="fas fa-trash-alt"></i> Eliminar
+                        </button>
+                    </div>
+                `;
+                container.appendChild(row);
+            });
+
+            document.getElementById('cart-total-display').innerText = '$' + calcularTotal();
+        }
+
+        function cambiarCantidad(index, operacion) {
+            const item = carrito[index];
+            const nuevaQty = item.qty + operacion;
+
+            if (nuevaQty <= 0) {
+                if (confirm(`¿Eliminar ${item.nombre} del pedido?`)) {
+                    carrito.splice(index, 1);
+                }
+            } else {
+                item.qty = nuevaQty;
+            }
+            
+            guardarCarrito();
+            renderizarCarrito();
+            actualizarBadges();
+        }
+
+        function eliminarItem(index) {
+            if(confirm('¿Seguro que deseas eliminar este producto?')) {
+                carrito.splice(index, 1);
+                guardarCarrito();
+                renderizarCarrito();
+                actualizarBadges();
+            }
+        }
+
+        function calcularTotal() {
+            let total = 0;
+            const countsById = {};
+
+            // 1. Agrupar cantidades por ID base para aplicar promociones
+            carrito.forEach(item => {
+                countsById[item.id] = (countsById[item.id] || 0) + item.qty;
+            });
+            
+            // 2. Calcular precio base usando la lógica de volumen (3x, 2x, 1x)
+            for (const [id, count] of Object.entries(countsById)) {
+                const product = rawMenu.find(p => p.id === id);
+                if (product.categoria === 'hamburguesas' && product.precios) {
+                    let qty = count;
+                    while (qty > 0) {
+                        if (qty >= 3) { total += product.precios["3"]; qty -= 3; }
+                        else if (qty >= 2) { total += product.precios["2"]; qty -= 2; }
+                        else { total += product.precios["1"]; qty -= 1; }
+                    }
+                } else {
+                    // Productos sin promo de volumen (extras)
+                    total += count * (product.precioUnitario || 0);
+                }
+            }
+
+            // 3. Sumar costos de extras individuales
+            carrito.forEach(item => {
+                total += item.extraPrice * item.qty;
+            });
+
+            return total;
+        }
+
+        function actualizarBadges() {
+            // Limpiar badges
+            document.querySelectorAll('[id^="badge-"]').forEach(el => el.innerText = '');
+            
+            // Total items para el FAB
+            let totalItems = 0;
+            
+            // Sumar cantidades
+            const counts = {};
+            carrito.forEach(item => {
+                counts[item.id] = (counts[item.id] || 0) + item.qty;
+                totalItems += item.qty;
+            });
+            
+            for (const [id, qty] of Object.entries(counts)) {
+                const badge = document.getElementById(`badge-${id}`);
+                if (badge) badge.innerText = `${qty} en carrito`;
+            }
+
+            // Actualizar FAB
+            document.getElementById('cart-count').innerText = totalItems;
+            const badgeBtn = document.getElementById('cart-count-badge');
+            if(badgeBtn) badgeBtn.innerText = totalItems;
+        }
+
+        async function enviarOrden() {
+            if (carrito.length === 0) return alert("El carrito está vacío");
+
+            const totalCalculado = calcularTotal();
+            const pedido = {
+                nombre: usuarioNombre,
+                tipo: ordenTipo,
+                items: carrito,
+                total: totalCalculado
+            };
+
+            fetch('/api/pedido', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(pedido)
+            })
+            .then(res => res.json())
+            .then(data => {
+                // Guardar pedido en local para seguimiento
+                misPedidos.push({ id: data.numeroOrden, estado: 'PENDING_PAYMENT', total: pedido.total });
+                localStorage.setItem('momoy_pedidos_activos', JSON.stringify(misPedidos));
+                
+                // Mostrar Paso 5 (Éxito)
+                document.getElementById('success-order-id').innerText = `#${data.numeroOrden}`;
+                mostrarPaso(5);
+                
+                // Reiniciar flujo
+                carrito = [];
+                guardarCarrito();
+                actualizarBadges();
+                renderizarPedidosActivos();
+            });
+        }
+
+        // --- FUNCIONES STAFF ---
+        function abrirLogin() {
+            document.getElementById('loginModal').style.display = 'flex';
+        }
+
+        function loginStaff() {
+            const u = document.getElementById('login-user').value;
+            const p = document.getElementById('login-pass').value;
+
+            fetch('/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username: u, password: p })
+            })
+            .then(async res => {
+                if (res.ok) return res.json();
+                const err = await res.json(); // Leer el mensaje de error del servidor (Rate Limit)
+                throw new Error(err.detail || 'Error desconocido');
+            })
+            .then(data => {
+                localStorage.setItem('token', data.access_token);
+                localStorage.setItem('role', data.role);
+                window.location.href = '/staff.html'; // Redirigir al Dashboard
+            })
+            .catch(err => alert(err.message)); // Mostrar mensaje real (ej: "Demasiados intentos...")
+        }
+
+        // --- SEGUIMIENTO DE PEDIDOS (SOCKET.IO) ---
+        
+        function renderizarPedidosActivos() {
+            const container = document.getElementById('active-orders-container');
+            container.innerHTML = '';
+
+            if (misPedidos.length > 0) {
+                misPedidos.forEach(p => {
+                    const div = document.createElement('div');
+                    div.className = 'order-status-card';
+                    let estadoTexto = '🕒 Pasa a caja a pagar';
+                    let color = '#ffc107'; // Amarillo
+
+                    if (p.estado === 'IN_KITCHEN') { estadoTexto = '👨‍🍳 Tu orden fue enviada a cocina'; color = '#ff9800'; }
+                    if (p.estado === 'PREPARING') { estadoTexto = '🔥 Estamos preparando tus alimentos'; color = '#2196f3'; }
+                    if (p.estado === 'READY') { estadoTexto = '✅ ¡LISTO! Pasa a recogerlo'; color = '#4caf50'; }
+
+                    div.innerHTML = `
+                        <div style="font-weight:bold; color:${color}; font-size:1.1rem;">Orden #${p.id}</div>
+                        <div style="color:white;">${estadoTexto}</div>
+                        <div style="font-size:0.8rem; color:#ccc;">Total: $${p.total}</div>
+                    `;
+                    container.appendChild(div);
+                });
+            }
+        }
+
+        // Escuchar actualizaciones del servidor
+        socket.on('actualizacion-pedido', (pedidoActualizado) => {
+            // Buscar si este pedido es mío
+            const index = misPedidos.findIndex(p => p.id === pedidoActualizado.numeroOrden);
+            if (index !== -1) {
+                misPedidos[index].estado = pedidoActualizado.status;
+                
+                if (pedidoActualizado.status === 'READY') {
+                    alert(`¡TU ORDEN #${pedidoActualizado.numeroOrden} ESTÁ LISTA! 🍔\n\nPasa a recogerla.`);
+                    // No borramos aún para que el cliente vea el aviso en verde
+                } else if (pedidoActualizado.status === 'COMPLETED') {
+                    alert(`¡TU ORDEN #${pedidoActualizado.numeroOrden} HA SIDO ENTREGADA!`);
+                    misPedidos.splice(index, 1); // Borrar
+                }
+
+                localStorage.setItem('momoy_pedidos_activos', JSON.stringify(misPedidos));
+                renderizarPedidosActivos();
+            }
+        });
+
+        // Función para consultar al servidor si algo cambió mientras no veíamos
+        function sincronizarEstados() {
+            if (misPedidos.length === 0) return;
+
+            let huboCambios = false;
+            const promesas = misPedidos.map(p => {
+                return fetch(`/api/pedido/${p.id}/status`)
+                    .then(res => {
+                        if (res.status === 404) {
+                            p.estado = 'COMPLETED'; // Si no existe en el servidor, marcar para borrar
+                            huboCambios = true;
+                            return {};
+                        }
+                        return res.json();
+                    })
+                    .then(data => {
+                        if (data.estado && data.estado !== p.estado) {
+                            p.estado = data.estado;
+                            huboCambios = true;
+                        }
+                    })
+                    .catch(err => console.log("Error sync:", err));
+            });
+
+            Promise.all(promesas).then(() => {
+                // Filtrar y guardar solo si hubo cambios o hay entregados
+                const activos = misPedidos.filter(p => p.estado !== 'COMPLETED');
+                
+                if (activos.length !== misPedidos.length || huboCambios) {
+                    misPedidos = activos;
+                    localStorage.setItem('momoy_pedidos_activos', JSON.stringify(misPedidos));
+                    renderizarPedidosActivos();
+                }
+            });
+        }
+    </script>
+</body>
+</html>
+</file>
+
+<file path="public/limpiar_db.js">
+
+</file>
+
+<file path="public/staff.html">
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Momoy's Staff</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        /* Estilos mínimos de estructura que no están en styles.css */
+        .view-section { display: none; }
+        .view-section.active { display: block; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; }
+    </style>
+</head>
+<body class="staff-mode">
+
+    <!-- 1. REPARACIÓN DEL APPBAR DE STAFF -->
+    <nav class="navbar navbar-custom d-flex align-items-center justify-content-between fixed-top">
+        <!-- Izquierda: Título y Badge -->
+        <div class="d-flex align-items-center gap-3">
+            <h1 class="m-0 text-white fs-4 fw-bold">Panel de Control</h1>
+            <span id="user-role" class="badge bg-secondary border border-light">CARGANDO...</span>
+        </div>
+
+        <!-- Centro: Botones de Navegación (Tabs) -->
+        <div class="d-flex align-items-center" id="nav-container">
+            <button class="nav-btn active" onclick="switchTab('orders')">Pedidos</button>
+            <!-- JS inyectará los demás aquí -->
+        </div>
+
+        <!-- Derecha: Salir -->
+        <div>
+            <button onclick="logout()" class="btn btn-outline-danger btn-sm fw-bold">
+                <i class="fas fa-sign-out-alt"></i> Salir
+            </button>
+        </div>
+    </nav>
+
+    <!-- VISTA PEDIDOS -->
+    <div id="view-orders" class="view-section active">
+        <div id="orders-grid" class="grid"></div>
+    </div>
+
+    <!-- VISTA MÉTRICAS -->
+    <div id="view-metrics" class="view-section">
+        <div class="container-fluid">
+            <h3 class="mb-3 text-primary"><i class="fas fa-chart-line"></i> Dashboard Operativo</h3>
+            <div class="row g-4">
+                <!-- Gráfica Principal: Ventas por Hora -->
+                <div class="col-12 col-lg-8">
+                    <div class="card shadow-sm h-100" style="background: var(--card); border: 1px solid #475569;">
+                        <div class="card-body">
+                            <h5 class="card-title" style="color: var(--text-muted);">Ventas por Hora (Hoy)</h5>
+                            <div style="position: relative; height: 300px;"><canvas id="salesChart"></canvas></div>
+                        </div>
+                    </div>
+                </div>
+                <!-- Categorías -->
+                <div class="col-12 col-lg-4">
+                    <div class="card shadow-sm h-100" style="background: var(--card); border: 1px solid #475569;">
+                        <div class="card-body">
+                            <h5 class="card-title" style="color: var(--text-muted);">Por Categoría</h5>
+                            <div style="position: relative; height: 300px;"><canvas id="categoryChart"></canvas></div>
+                        </div>
+                    </div>
+                </div>
+                <!-- Finanzas -->
+                <div class="col-12 col-md-6">
+                    <div class="card shadow-sm h-100" style="background: var(--card); border: 1px solid #475569;">
+                        <div class="card-body">
+                            <h5 class="card-title text-success">Finanzas (Mes Actual)</h5>
+                            <div style="position: relative; height: 250px;"><canvas id="financialChart"></canvas></div>
+                        </div>
+                    </div>
+                </div>
+                <!-- Top Productos -->
+                <div class="col-12 col-md-6">
+                    <div class="card shadow-sm h-100" style="background: var(--card); border: 1px solid #475569;">
+                        <div class="card-body">
+                            <h5 class="card-title text-warning">Top 5 Productos</h5>
+                            <div style="position: relative; height: 250px;"><canvas id="topProductsChart"></canvas></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- VISTA INVENTARIO -->
+    <div id="view-inventory" class="view-section">
+        <button class="btn btn-primary mb-3" onclick="abrirModalNuevo()">+ Nuevo Producto</button>
+        <table id="inventory-table">
+            <thead><tr><th>Producto</th><th>Stock</th><th>Unidad</th><th>Sección</th><th>Precio</th><th>Acciones</th></tr></thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <!-- VISTA USUARIOS -->
+    <div id="view-users" class="view-section">
+        <button class="btn btn-add" onclick="openModal('modal-user')">+ Nuevo Usuario</button>
+        <table id="users-table">
+            <thead><tr><th>Usuario</th><th>Rol</th><th>Acciones</th></tr></thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <!-- VISTA MENÚ -->
+    <div id="view-menu" class="view-section">
+        <button class="btn btn-add" onclick="editProduct(null)">+ Nuevo Producto</button>
+        <table id="menu-table">
+            <thead><tr><th>Nombre</th><th>Categoría</th><th>Precios</th><th>Acciones</th></tr></thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <!-- MODAL INVENTARIO -->
+    <div class="modal fade" id="modal-inventory" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-scrollable modal-fullscreen-md-down">
+            <div class="modal-content" style="background: var(--card); color: var(--text);">
+                <div class="modal-header" style="border-bottom: 1px solid #475569;">
+                    <h5 class="modal-title" id="modal-inv-title">Producto de Inventario</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="inv-id">
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label">Nombre del Insumo</label>
+                            <input type="text" id="inv-name" class="form-control bg-dark text-light border-secondary" placeholder="Ej. Pan, Carne">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label">Stock Actual</label>
+                            <input type="number" id="inv-qty" class="form-control bg-dark text-light border-secondary">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label">Unidad</label>
+                            <select id="inv-unit" class="form-select bg-dark text-light border-secondary">
+                                <option value="pza">Pieza (pza)</option>
+                                <option value="g">Gramos (g)</option>
+                                <option value="ml">Mililitros (ml)</option>
+                                <option value="kg">Kilogramos (kg)</option>
+                                <option value="lt">Litros (lt)</option>
+                            </select>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label">Sección</label>
+                            <select id="inv-sec" class="form-select bg-dark text-light border-secondary">
+                                <option value="General">General</option>
+                                <option value="Cocina">Cocina</option>
+                                <option value="Barra">Barra</option>
+                                <option value="Bebidas">Bebidas</option>
+                            </select>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label">Stock Mínimo</label>
+                            <input type="number" id="inv-min" class="form-control bg-dark text-light border-secondary" value="5">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Costo Unitario ($)</label>
+                            <input type="number" id="inv-costo" class="form-control bg-dark text-light border-secondary" placeholder="0.00">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Precio Venta (Opcional)</label>
+                            <input type="number" id="inv-price" class="form-control bg-dark text-light border-secondary" placeholder="0.00">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer" style="border-top: 1px solid #475569;">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-primary" onclick="guardarProducto()">Guardar Insumo</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Edición/Creación -->
+    <div class="modal fade" id="modal-menu" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-scrollable">
+            <div class="modal-content" style="background: var(--card); color: var(--text);">
+                <div class="modal-header" style="border-bottom: 1px solid #475569;">
+                    <h5 class="modal-title">Editar Producto</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="prod-id">
+                    <div class="row g-3">
+                        <div class="col-12"><label class="form-label">Nombre</label><input type="text" id="prod-name" class="form-control"></div>
+                        <div class="col-6"><label class="form-label">Categoría</label>
+                            <select id="prod-cat" class="form-select"><option value="hamburguesas">Hamburguesas</option><option value="extras">Extras</option></select>
+                        </div>
+                        <div class="col-6"><label class="form-label">Precio Unitario</label><input type="number" id="prod-unit" class="form-control"></div>
+                        
+                        <div class="col-4"><label class="form-label">Precio 1x</label><input type="number" id="prod-p1" class="form-control"></div>
+                        <div class="col-4"><label class="form-label">Precio 2x</label><input type="number" id="prod-p2" class="form-control"></div>
+                        <div class="col-4"><label class="form-label">Precio 3x</label><input type="number" id="prod-p3" class="form-control"></div>
+
+                        <div class="col-12"><label class="form-label">Ingredientes (texto simple)</label><input type="text" id="prod-ing" class="form-control" placeholder="Pan, Carne, Tomate"></div>
+                        <div class="col-12"><label class="form-label">Extras (Nombre:Precio, ...)</label><input type="text" id="prod-ext" class="form-control" placeholder="Queso:10, Tocino:15"></div>
+
+                        <!-- Receta Dinámica -->
+                        <div class="col-12 mt-4">
+                            <h6 class="text-primary">Receta (Descuento de Inventario)</h6>
+                            <div class="input-group mb-2">
+                                <select id="receta-select" class="form-select"></select>
+                                <input type="number" id="receta-qty" class="form-control" placeholder="Cant." style="max-width: 80px;">
+                                <button class="btn btn-primary" onclick="addIngredient()">+</button>
+                            </div>
+                            <ul id="receta-list" class="list-group"></ul>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer" style="border-top: 1px solid #475569;">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-primary" onclick="saveProduct()">Guardar Cambios</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL USUARIO -->
+    <div id="modal-user" class="modal">
+        <div class="modal-content" style="background: var(--card); color: var(--text);">
+            <h3>Usuario Staff</h3>
+            <div class="form-group"><label>Usuario</label><input type="text" id="usr-name"></div>
+            <div class="form-group"><label>Contraseña</label><input type="password" id="usr-pass"></div>
+            <div class="form-group"><label>Rol</label>
+                <select id="usr-role">
+                    <option value="cashier">Cajero</option>
+                    <option value="cook">Cocinero</option>
+                    <option value="admin">Administrador</option>
+                </select>
+            </div>
+            <button class="btn btn-cook" onclick="saveUser()" style="width:100%">Crear Usuario</button>
+            <button class="btn" onclick="closeModal('modal-user')" style="width:100%; background:#ccc; margin-top:10px; color:#333">Cancelar</button>
+        </div>
+    </div>
+
+    <!-- VINCULACIÓN DEL NUEVO SCRIPT ADMIN -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="js/admin.js"></script>
+
+    <script>
+        const token = localStorage.getItem('token');
+        const role = localStorage.getItem('role');
+        let productList = []; // Cache para edición segura
+        let inventoryList = []; // Cache para el dropdown de recetas
+        const socket = io();
+
+        if (!token) window.location.href = '/';
+
+        document.getElementById('user-role').innerText = role.toUpperCase();
+
+        // Configurar Navegación según Rol
+        const navContainer = document.getElementById('nav-container');
+        if (role === 'admin') {
+            navContainer.innerHTML += `
+                <button class="nav-btn" onclick="switchTab('metrics')">📊 Métricas</button>
+                <button class="nav-btn" onclick="switchTab('inventory')">📋 Inventario</button>
+                <button class="nav-btn" onclick="switchTab('users')">👥 Usuarios</button>
+                <button class="nav-btn" onclick="switchTab('menu')">🍔 Menú</button>
+            `;
+        }
+
+        // --- NAVEGACIÓN ---
+        function switchTab(tabName) {
+            document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
+            
+            document.getElementById(`view-${tabName}`).classList.add('active');
+            event.target.classList.add('active');
+
+            if (tabName === 'metrics') loadAllMetrics();
+            if (tabName === 'inventory') cargarInventario(); // Usar nueva función de admin.js
+            if (tabName === 'users') loadUsers();
+            if (tabName === 'menu') loadMenu();
+        }
+
+        // Cargar pedidos al iniciar
+        authFetch('/api/pedidos')
+            .then(res => {
+                if (res.status === 401 || res.status === 403) logout();
+                return res.json();
+            })
+            .then(pedidos => {
+                pedidos.forEach(renderOrder);
+            });
+
+        // --- SOCKET.IO EVENTOS ---
+        socket.on('nuevo-pedido', (pedido) => {
+            renderOrder(pedido);
+            playNotification('new');
+        });
+
+        socket.on('actualizacion-pedido', (pedido) => {
+            // Reemplazar tarjeta existente
+            const existing = document.getElementById(`order-${pedido._id}`);
+            if (existing) existing.remove();
+            if (pedido.status === 'READY') playNotification('ready');
+            renderOrder(pedido);
+        });
+
+        function renderOrder(pedido) {
+            // Filtrar qué ve cada rol
+            if (role === 'cashier' && pedido.status !== 'PENDING_PAYMENT' && pedido.status !== 'READY') return; 
+            if (role === 'cook' && pedido.status === 'PENDING_PAYMENT') return; 
+            if (pedido.status === 'COMPLETED') return; 
+
+            const grid = document.getElementById('orders-grid');
+            const card = document.createElement('div');
+            card.className = `order-card card-${pedido.status}`;
+            card.id = `order-${pedido._id}`;
+
+            let itemsHtml = '';
+            
+            // Verificar si es el nuevo formato (Array) o el antiguo (Objeto)
+            if (Array.isArray(pedido.items)) {
+                pedido.items.forEach(item => {
+                    // Mostrar modificaciones en rojo si existen
+                    const modsHtml = item.mods && item.mods.length > 0 
+                        ? `<div style="color: #d32f2f; font-size: 0.9rem; margin-left: 25px; font-style: italic;">⚠️ ${item.mods.join(', ')}</div>` 
+                        : '';
+                    
+                    itemsHtml += `<li style="display: block; margin-bottom: 5px;"><span class="item-qty">${item.qty}x</span> ${item.nombre} ${modsHtml}</li>`;
+                });
+            } else {
+                // Soporte para pedidos antiguos
+                for (const [name, qty] of Object.entries(pedido.items)) {
+                    if (qty > 0) itemsHtml += `<li><span class="item-qty">${qty}x</span> ${name}</li>`;
+                }
+            }
+
+            let actionsHtml = '';
+            
+            // LÓGICA DE BOTONES SEGÚN ROL Y ESTADO
+            if (role === 'admin' || role === 'cashier') {
+                if (pedido.status === 'PENDING_PAYMENT') {
+                    actionsHtml += `<button class="btn btn-pay" onclick="cambiarEstado('${pedido._id}', 'IN_KITCHEN')">💰 Cobrar $${pedido.total}</button>`;
+                    actionsHtml += `<button class="btn btn-cancel" onclick="alert('Función borrar pendiente')">🗑️</button>`;
+                }
+            }
+            
+            if (role === 'admin' || role === 'cook') {
+                if (pedido.status === 'IN_KITCHEN') {
+                    actionsHtml += `<button class="btn btn-cook" onclick="cambiarEstado('${pedido._id}', 'PREPARING')">🔥 Cocinar</button>`;
+                } else if (pedido.status === 'PREPARING') {
+                    actionsHtml += `<button class="btn btn-ready" onclick="cambiarEstado('${pedido._id}', 'READY')">✅ Listo</button>`;
+                }
+            }
+
+            if (pedido.status === 'READY' && (role === 'admin' || role === 'cashier')) {
+                 actionsHtml += `<button class="btn btn-pay" onclick="cambiarEstado('${pedido._id}', 'COMPLETED')">📦 Entregar</button>`;
+            }
+
+            card.innerHTML = `
+                <div class="order-header">
+                    <span class="order-id">#${pedido.numeroOrden} - ${pedido.cliente}</span>
+                    <span class="order-time">${new Date(pedido.fecha).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                </div>
+                <div class="status-badge st-${pedido.status}">${pedido.status.replace('_', ' ')}</div>
+                <div style="margin-bottom:10px; font-weight:bold; color:#555;">${pedido.tipo}</div>
+                <ul class="items-list">${itemsHtml}</ul>
+                <div class="actions">${actionsHtml}</div>
+            `;
+
+            // Insertar al principio si es nuevo
+            grid.prepend(card);
+        }
+
+        function cambiarEstado(id, nuevoStatus) {
+            authFetch(`/api/pedido/${id}/status`, {
+                method: 'POST',
+                body: JSON.stringify({ status: nuevoStatus })
+            });
+        }
+
+        // --- GESTIÓN DE USUARIOS ---
+        function loadUsers() {
+            authFetch('/api/users')
+                .then(res => res.json())
+                .then(users => {
+                    const tbody = document.querySelector('#users-table tbody');
+                    tbody.innerHTML = users.map(u => `
+                        <tr>
+                            <td>${u.username}</td>
+                            <td><span class="role-badge">${u.role}</span></td>
+                            <td>
+                                ${u.username !== 'admin' ? `<button class="btn btn-cancel" onclick="deleteItem('${u._id}', 'users')">🗑️</button>` : ''}
+                            </td>
+                        </tr>
+                    `).join('');
+                });
+        }
+
+        function saveUser() {
+            const data = {
+                username: document.getElementById('usr-name').value,
+                password: document.getElementById('usr-pass').value,
+                role: document.getElementById('usr-role').value
+            };
+            authFetch('/api/users', {
+                method: 'POST',
+                body: JSON.stringify(data)
+            }).then(() => { closeModal('modal-user'); loadUsers(); });
+        }
+
+        // --- GESTIÓN DE MENÚ ---
+        function loadMenu() {
+            authFetch('/api/products') // Nota: Si esta ruta es pública, authFetch no estorba, pero si es protegida, ahora funcionará.
+                .then(res => res.json())
+                .then(data => {
+                    // Guardamos en variable global para buscar por ID al editar
+                    productList = [...(data.hamburguesas || []), ...(data.extras || [])];
+                    const tbody = document.querySelector('#menu-table tbody');
+                    tbody.innerHTML = productList.map(p => `
+                        <tr>
+                            <td>${p.nombre}</td>
+                            <td>${p.categoria}</td>
+                            <td>${p.categoria === 'hamburguesas' ? `1:$${p.precios["1"]} 2:$${p.precios["2"]}` : `$${p.precioUnitario}`}</td>
+                            <td>
+                                <!-- CORRECCIÓN: Usar ID en lugar de objeto completo para evitar errores de sintaxis -->
+                                <button class="btn btn-cook" onclick="editProduct('${p.id}')">✏️</button>
+                                <button class="btn btn-cancel" onclick="deleteItem('${p.id}', 'products')">🗑️</button>
+                            </td>
+                        </tr>
+                    `).join('');
+                });
+        }
+
+        let currentRecipe = []; // Variable temporal para editar receta
+
+        function editProduct(id) {
+            // Buscar producto en la lista cacheada
+            const p = id ? productList.find(x => x.id === id) : null;
+
+            // Cargar inventario si no existe, para el dropdown
+            if(inventoryList.length === 0) cargarInventario(); // Usar nueva función
+
+            document.getElementById('prod-id').value = p ? p.id : '';
+            document.getElementById('prod-name').value = p ? p.nombre : '';
+            document.getElementById('prod-cat').value = p ? p.categoria : 'hamburguesas';
+            document.getElementById('prod-p1').value = p && p.precios ? p.precios["1"] : 0;
+            document.getElementById('prod-p2').value = p && p.precios ? p.precios["2"] : 0;
+            document.getElementById('prod-p3').value = p && p.precios ? p.precios["3"] : 0;
+            document.getElementById('prod-unit').value = p ? p.precioUnitario : 0;
+            document.getElementById('prod-ing').value = p && p.ingredientes ? p.ingredientes.join(',') : '';
+            // Simplificado para extras: solo nombres por ahora en edición rápida
+            document.getElementById('prod-ext').value = p && p.adicionales ? p.adicionales.map(a => `${a.nombre}:${a.precio}`).join(',') : '';
+            
+            // Cargar Receta
+            currentRecipe = p && p.receta ? p.receta.map(r => ({
+                insumoId: r.insumo ? r.insumo._id : r.insumo, // Manejar si viene poblado o no
+                nombre: r.insumo ? r.insumo.nombre : 'Insumo borrado',
+                cantidad: r.cantidad
+            })) : [];
+            renderRecipeList();
+            populateInventoryDropdown();
+
+            openModal('modal-menu');
+        }
+
+        function populateInventoryDropdown() {
+            const select = document.getElementById('receta-select');
+            select.innerHTML = '<option value="">Seleccionar Insumo...</option>' + 
+                inventoryList.map(i => `<option value="${i._id}">${i.nombre} (${i.unidad})</option>`).join('');
+        }
+
+        function addIngredient() {
+            const select = document.getElementById('receta-select');
+            const qty = document.getElementById('receta-qty').value;
+            const id = select.value;
+            
+            if(!id || !qty) return alert("Selecciona insumo y cantidad");
+
+            const name = select.options[select.selectedIndex].text;
+            currentRecipe.push({ insumoId: id, nombre: name, cantidad: parseFloat(qty) });
+            renderRecipeList();
+            document.getElementById('receta-qty').value = '';
+        }
+
+        function removeIngredient(index) {
+            currentRecipe.splice(index, 1);
+            renderRecipeList();
+        }
+
+        function renderRecipeList() {
+            const list = document.getElementById('receta-list');
+            list.innerHTML = currentRecipe.map((r, i) => `
+                <li style="display:flex; justify-content:space-between; margin-bottom:5px; background:#eee; padding:5px; border-radius:4px;">
+                    <span>${r.nombre} - ${r.cantidad}</span>
+                    <span style="color:red; cursor:pointer;" onclick="removeIngredient(${i})">✖</span>
+                </li>
+            `).join('');
+        }
+
+        function saveProduct() {
+            const extrasRaw = document.getElementById('prod-ext').value.split(',');
+            const extras = extrasRaw.filter(e => e.includes(':')).map(e => {
+                const [nombre, precio] = e.split(':');
+                return { nombre: nombre.trim(), precio: parseFloat(precio) };
+            });
+
+            const data = {
+                id: document.getElementById('prod-id').value || 'prod_' + Date.now(),
+                nombre: document.getElementById('prod-name').value,
+                categoria: document.getElementById('prod-cat').value,
+                precios: {
+                    "1": parseFloat(document.getElementById('prod-p1').value),
+                    "2": parseFloat(document.getElementById('prod-p2').value),
+                    "3": parseFloat(document.getElementById('prod-p3').value)
+                },
+                precioUnitario: parseFloat(document.getElementById('prod-unit').value),
+                ingredientes: document.getElementById('prod-ing').value.split(',').map(s => s.trim()).filter(s => s),
+                adicionales: extras,
+                receta: currentRecipe.map(r => ({
+                    insumo: r.insumoId,
+                    cantidad: r.cantidad
+                }))
+            };
+
+            authFetch('/api/products', {
+                method: 'POST',
+                body: JSON.stringify(data)
+            }).then(() => { closeModal('modal-menu'); loadMenu(); });
+        }
+
+        // --- UTILIDADES ---
+        function deleteItem(id, type) {
+            if(!confirm('¿Seguro que deseas eliminar?')) return;
+            authFetch(`/api/${type}/${id}`, {
+                method: 'DELETE',
+            }).then(() => {
+                if(type === 'inventory') cargarInventario();
+                else if(type === 'products') loadMenu();
+                else loadUsers();
+            });
+        }
+
+        function openModal(id) { document.getElementById(id).style.display = 'flex'; }
+        function closeModal(id) { 
+            // Soporte para Bootstrap 5 Modal
+            const modalEl = document.getElementById(id);
+            const modal = bootstrap.Modal.getInstance(modalEl);
+            if (modal) {
+                modal.hide();
+            } else {
+                // Fallback si no es instancia bootstrap (legacy)
+                modalEl.style.display = 'none';
+            }
+        }
+        
+        // Sobreescribir openModal para usar Bootstrap si es un modal de bootstrap
+        const originalOpenModal = openModal;
+        window.openModal = function(id) {
+            const el = document.getElementById(id);
+            if (el.classList.contains('modal')) {
+                const modal = new bootstrap.Modal(el);
+                modal.show();
+            } else {
+                originalOpenModal(id);
+            }
+        }
+
+        // --- MÉTRICAS (Chart.js) ---
+        const charts = {}; // Almacenar instancias para destruirlas y evitar superposiciones
+
+        function loadAllMetrics() {
+            // 1. Ventas por Hora (Daily Average)
+            authFetch('/api/metrics/daily-average')
+                .then(res => res.json())
+                .then(res => {
+                    if(res.success) renderChart('salesChart', 'line', {
+                        labels: res.data.map(d => `${d.hora}:00`),
+                        datasets: [{ 
+                            label: 'Ventas ($)', 
+                            data: res.data.map(d => d.totalVentas), 
+                            borderColor: '#1e88e5',
+                            backgroundColor: 'rgba(30, 136, 229, 0.2)',
+                            fill: true,
+                            tension: 0.4
+                        }]
+                    });
+                });
+
+            // 2. Finanzas
+            authFetch('/api/metrics/financials')
+                .then(res => res.json())
+                .then(data => {
+                    renderChart('financialChart', 'bar', {
+                        labels: ['Ingresos', 'Costos', 'Ganancia'],
+                        datasets: [{ 
+                            label: 'Total ($)', 
+                            data: [data.ingresoTotal, data.costoTotal, data.gananciaNeta],
+                            backgroundColor: ['#4caf50', '#f44336', '#ffc107']
+                        }]
+                    });
+                });
+
+            // 3. Categorías
+            authFetch('/api/metrics/categories')
+                .then(res => res.json())
+                .then(data => {
+                    renderChart('categoryChart', 'doughnut', {
+                        labels: data.map(d => d._id.toUpperCase()),
+                        datasets: [{
+                            data: data.map(d => d.cantidadVendida),
+                            backgroundColor: ['#ff9800', '#2196f3', '#9c27b0', '#00bcd4', '#e91e63']
+                        }]
+                    });
+                });
+
+            // 4. Top Productos
+            authFetch('/api/metrics/top-products')
+                .then(res => res.json())
+                .then(data => {
+                    renderChart('topProductsChart', 'bar', {
+                        labels: data.map(d => d._id),
+                        datasets: [{
+                            label: 'Unidades',
+                            data: data.map(d => d.unidades),
+                            backgroundColor: '#673ab7'
+                        }]
+                    }, { indexAxis: 'y' });
+                });
+        }
+
+        function renderChart(canvasId, type, data, extraOptions = {}) {
+            const ctx = document.getElementById(canvasId);
+            if (!ctx) return;
+
+            if (charts[canvasId]) {
+                charts[canvasId].destroy();
+            }
+
+            charts[canvasId] = new Chart(ctx, {
+                type: type,
+                data: data,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: type !== 'bar' && type !== 'line' } }, // Ocultar leyenda en barras simples
+                    ...extraOptions
+                }
+            });
+        }
+
+        function logout() {
+            localStorage.removeItem('token');
+            localStorage.removeItem('role');
+            window.location.href = '/';
+        }
+
+        function playNotification(type) {
+            let soundUrl = '';
+            if (type === 'new') soundUrl = 'https://actions.google.com/sounds/v1/alarms/beep_short.ogg'; // Beep corto
+            if (type === 'ready') soundUrl = 'https://actions.google.com/sounds/v1/cartoon/pop.ogg'; // Pop suave
+            
+            if (soundUrl) {
+                const audio = new Audio(soundUrl);
+                audio.play().catch(e => console.log("Audio bloqueado por navegador"));
+            }
+        }
+    </script>
+</file>
+
+<file path="public/styles.css">
+:root {
+    /* A. TEMA GLOBAL (CLIENTE / MENÚ) - "Buns & Grill" */
+    
+    /* Fondo: Crema Suave / Beige Hueso (No blanco puro) */
+    --bg-cream: #F9F7F2;      
+    
+    /* Acento: Naranja Quemado / Terracota (Estimula el apetito) */
+    --primary-orange: #E65100; 
+    --primary-hover: #BF360C;
+    
+    /* Tipografía: Gris muy oscuro o Marrón Café (Lectura suave) */
+    --text-dark: #2E2725;     
+    --text-muted: #6D4C41;
+    
+    /* UI Elements */
+    --card-bg: #FFFBF5; /* Tono mantequilla muy suave */
+    --card-shadow: 0 4px 20px rgba(46, 39, 35, 0.08);
+    --border-radius: 16px;
+
+    /* Bootstrap Overrides (Cliente) */
+    --bs-body-bg: var(--bg-cream);
+    --bs-body-color: var(--text-dark);
+    --bs-primary: var(--primary-orange);
+    --bs-primary-rgb: 230, 81, 0;
+    --bs-border-color: #EFEBE9;
+}
+
+body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background-color: var(--bg-cream);
+    color: var(--text-dark);
+}
+
+/* --- COMPONENTES CLIENTE --- */
+
+/* Tarjetas de Producto */
+.card-product, .card {
+    background-color: var(--card-bg);
+    border: 1px solid rgba(230, 81, 0, 0.1);
+    border-radius: var(--border-radius);
+    box-shadow: var(--card-shadow);
+    transition: transform 0.2s ease;
+    margin-bottom: 15px;
+}
+
+.card:hover {
+    transform: translateY(-3px);
+}
+
+.item-title {
+    font-weight: 700;
+    color: var(--text-dark);
+    font-size: 1.1rem;
+}
+
+.prices {
+    color: var(--primary-orange);
+    font-weight: 600;
+}
+
+/* Botones Primarios (Naranja Terracota) */
+.btn-primary, .big-btn, .btn-order {
+    background-color: var(--primary-orange) !important;
+    border: none !important;
+    color: white !important;
+    border-radius: 50px !important; /* Pill shape amigable */
+    padding: 12px 25px;
+    font-weight: bold;
+    box-shadow: 0 4px 10px rgba(230, 81, 0, 0.3);
+    transition: all 0.2s;
+    cursor: pointer;
+    width: 100%;
+}
+
+.btn-primary:hover, .big-btn:hover, .btn-order:hover {
+    background-color: var(--primary-hover) !important;
+    transform: translateY(-2px);
+}
+
+/* Modales Cliente (Evitar blanco puro) */
+.modal-content {
+    background-color: var(--bg-cream);
+    border-radius: var(--border-radius);
+    border: none;
+    box-shadow: 0 15px 40px rgba(62, 39, 35, 0.2);
+}
+
+.modal-header {
+    background-color: var(--card-bg);
+    border-bottom: 1px solid rgba(0,0,0,0.05);
+}
+
+.modal-footer {
+    background-color: var(--card-bg);
+    border-top: none;
+}
+
+/* Inputs Cliente */
+input[type="text"], input[type="password"], input[type="number"], select {
+    background-color: #FFFFFF;
+    border: 2px solid #E0E0E0;
+    color: var(--text-dark);
+    border-radius: 12px;
+    padding: 12px;
+    width: 100%;
+    margin-bottom: 10px;
+}
+
+input:focus, select:focus {
+    outline: none;
+    border-color: var(--primary-orange);
+    box-shadow: 0 0 0 3px rgba(230, 81, 0, 0.1);
+}
+
+/* --- B. TEMA STAFF (ADMIN) - DARK MODE --- */
+/* Se activa solo cuando el body tiene la clase .staff-mode */
+
+body.staff-mode {
+    /* Fondo Principal: Gris Azulado Oscuro / Charcoal (Descanso visual) */
+    background-color: #1e293b; 
+    color: #f1f5f9;
+    padding-top: 90px; /* Espacio para navbar fixed */
+    --bs-body-color: #f1f5f9;
+}
+
+/* Navbar Admin (Mantenemos tu estilo solicitado: #2C3E50) */
+body.staff-mode .navbar-custom {
+    background-color: #2C3E50; /* Fondo Oscuro Sólido */
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    padding: 0.8rem 2rem;
+    border-bottom: 1px solid #334155;
+}
+
+body.staff-mode .navbar-brand, 
+body.staff-mode h1 {
+    color: white !important;
+    font-weight: 700;
+}
+
+/* Botones de Navegación Admin */
+body.staff-mode .nav-btn {
+    background: transparent;
+    color: rgba(255,255,255,0.7);
+    border: none;
+    padding: 8px 15px;
+    border-radius: 6px;
+    transition: 0.2s;
+    font-weight: 500;
+}
+
+body.staff-mode .nav-btn:hover {
+    color: white;
+    background: rgba(255,255,255,0.1);
+}
+
+body.staff-mode .nav-btn.active {
+    color: white;
+    background: rgba(255,255,255,0.2);
+    font-weight: bold;
+}
+
+/* Tarjetas y Contenedores en Staff (Dark Mode) */
+body.staff-mode .card, 
+body.staff-mode .modal-content,
+body.staff-mode .order-card {
+    background-color: #334155; /* Gris Pizarra */
+    color: #f1f5f9;
+    border: 1px solid #475569;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+}
+
+body.staff-mode .modal-header,
+body.staff-mode .modal-footer {
+    background-color: #1e293b; /* Fondo más oscuro para headers */
+    border-color: #475569;
+}
+
+body.staff-mode .card-title {
+    color: #cbd5e1;
+}
+
+/* Tablas de Inventario (Dark Mode) */
+body.staff-mode table {
+    width: 100%;
+    background-color: #334155;
+    color: #f1f5f9;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+}
+
+body.staff-mode thead th {
+    background-color: #0f172a; /* Muy oscuro */
+    color: #94a3b8;
+    padding: 15px;
+    text-transform: uppercase;
+    font-size: 0.85rem;
+    border-bottom: 1px solid #475569;
+}
+
+body.staff-mode tbody tr:nth-child(even) {
+    background-color: #3b4d61; /* Zebra striping sutil */
+}
+
+body.staff-mode tbody td {
+    padding: 12px 15px;
+    border-bottom: 1px solid #475569;
+    vertical-align: middle;
+}
+
+body.staff-mode tr:hover {
+    background-color: #475569;
+}
+
+/* Inputs en Staff (Dark Mode) */
+body.staff-mode input, 
+body.staff-mode select,
+body.staff-mode .form-control,
+body.staff-mode .form-select {
+    background-color: #1e293b;
+    border: 1px solid #475569;
+    color: #f1f5f9;
+}
+
+body.staff-mode input:focus, 
+body.staff-mode select:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+}
+
+/* Indicadores de Estado (Semáforo solicitado) */
+.st-PENDING_PAYMENT { 
+    background: rgba(245, 158, 11, 0.15); 
+    color: #fbbf24; /* Amarillo Mostaza */
+    border: 1px solid #f59e0b; 
+    padding: 5px 10px; border-radius: 5px; font-weight: bold; font-size: 0.8rem;
+}
+.st-IN_KITCHEN { 
+    background: rgba(59, 130, 246, 0.15); 
+    color: #60a5fa; /* Azul Acero */
+    border: 1px solid #3b82f6; 
+    padding: 5px 10px; border-radius: 5px; font-weight: bold; font-size: 0.8rem;
+}
+.st-PREPARING {
+    background: rgba(99, 102, 241, 0.15);
+    color: #818cf8;
+    border: 1px solid #6366f1;
+    padding: 5px 10px; border-radius: 5px; font-weight: bold; font-size: 0.8rem;
+}
+.st-READY { 
+    background: rgba(16, 185, 129, 0.15); 
+    color: #34d399; /* Verde Esmeralda */
+    border: 1px solid #10b981; 
+    padding: 5px 10px; border-radius: 5px; font-weight: bold; font-size: 0.8rem;
+}
+.st-COMPLETED {
+    background: rgba(148, 163, 184, 0.15);
+    color: #cbd5e1;
+    border: 1px solid #94a3b8;
+    padding: 5px 10px; border-radius: 5px; font-weight: bold; font-size: 0.8rem;
+}
+
+/* Botones de Acción Staff */
+.btn-pay { background-color: #f59e0b; color: #1e293b; border: none; padding: 5px 10px; border-radius: 5px; font-weight: bold; }
+.btn-cook { background-color: #3b82f6; color: white; border: none; padding: 5px 10px; border-radius: 5px; font-weight: bold; }
+.btn-ready { background-color: #10b981; color: white; border: none; padding: 5px 10px; border-radius: 5px; font-weight: bold; }
+.btn-cancel { background-color: #ef4444; color: white; border: none; padding: 5px 10px; border-radius: 5px; font-weight: bold; }
+.btn-add { background-color: #3b82f6; color: white; border: none; padding: 8px 15px; border-radius: 5px; font-weight: bold; }
+
+/* Filtros visuales en tarjetas (Borde izquierdo) */
+.card-PENDING_PAYMENT { border-left: 5px solid #f59e0b !important; }
+.card-IN_KITCHEN { border-left: 5px solid #3b82f6 !important; }
+.card-PREPARING { border-left: 5px solid #6366f1 !important; }
+.card-READY { border-left: 5px solid #10b981 !important; }
+}
+</file>
+
+<file path="routes/inventory.js">
+const express = require('express');
+const router = express.Router();
+const Inventory = require('../models/Inventory');
+const { verificarToken, permitirRoles } = require('../src/middlewares/auth.middleware');
+
+// Obtener todo el inventario
+router.get('/', verificarToken, permitirRoles('admin', 'cook'), async (req, res) => {
+    try {
+        const items = await Inventory.find().sort({ nombre: 1 });
+        res.json(items);
+    } catch (error) {
+        res.status(500).json({ error: 'Error al obtener inventario' });
+    }
+});
+
+module.exports = router;
+</file>
+
+<file path="routes/metrics.js">
+const express = require('express');
+const router = express.Router();
+const StockManager = require('../models/StockManager');
+const Sale = require('../models/Sale'); // Nuevo modelo de ventas
+const { verificarToken, permitirRoles } = require('../src/middlewares/auth.middleware');
+
+// Endpoint existente (Dashboard General)
+router.get('/dashboard', verificarToken, permitirRoles('admin'), async (req, res) => {
+    const { start, end } = req.query;
+    const startDate = start ? new Date(start) : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+    const endDate = end ? new Date(end) : new Date();
+
+    try {
+        const metrics = await StockManager.obtenerMetricasAvanzadas(startDate, endDate);
+        res.json(metrics);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// --- NUEVOS ENDPOINTS DE INTELIGENCIA DE NEGOCIOS ---
+
+// 1. Reporte Financiero (Ganancias vs Costos)
+router.get('/financials', verificarToken, permitirRoles('admin'), async (req, res) => {
+    try {
+        const { start, end } = req.query;
+        const startDate = start ? new Date(start) : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+        const endDate = end ? new Date(end) : new Date();
+
+        const financials = await Sale.aggregate([
+            { $match: { fecha: { $gte: startDate, $lte: endDate } } },
+            {
+                $group: {
+                    _id: null,
+                    ingresoTotal: { $sum: "$totalVenta" },
+                    costoTotal: { $sum: "$totalCosto" },
+                    gananciaNeta: { $sum: "$gananciaNeta" },
+                    ticketPromedio: { $avg: "$totalVenta" },
+                    totalTransacciones: { $sum: 1 }
+                }
+            }
+        ]);
+
+        res.json(financials[0] || { ingresoTotal: 0, costoTotal: 0, gananciaNeta: 0 });
+    } catch (error) {
+        res.status(500).json({ error: 'Error calculando finanzas' });
+    }
+});
+
+// 2. Ventas por Categoría (Hamburguesas vs HotDogs)
+router.get('/categories', verificarToken, permitirRoles('admin'), async (req, res) => {
+    try {
+        const categoryStats = await Sale.aggregate([
+            { $unwind: "$items" }, // Desglosar cada venta en sus productos individuales
+            {
+                $group: {
+                    _id: "$items.categoria", // Agrupar por categoría (ej. 'hamburguesas')
+                    cantidadVendida: { $sum: "$items.cantidad" },
+                    dineroGenerado: { $sum: { $multiply: ["$items.cantidad", "$items.precioUnitario"] } }
+                }
+            },
+            { $sort: { cantidadVendida: -1 } } // Ordenar de mayor a menor
+        ]);
+        res.json(categoryStats);
+    } catch (error) {
+        res.status(500).json({ error: 'Error en reporte de categorías' });
+    }
+});
+
+// 3. Top Productos (Ranking de Popularidad)
+router.get('/top-products', verificarToken, permitirRoles('admin'), async (req, res) => {
+    try {
+        const topProducts = await Sale.aggregate([
+            { $unwind: "$items" },
+            {
+                $group: {
+                    _id: "$items.nombre", // Agrupar por nombre del producto
+                    unidades: { $sum: "$items.cantidad" },
+                    gananciaGenerada: { 
+                        $sum: { 
+                            $multiply: [
+                                "$items.cantidad", 
+                                { $subtract: ["$items.precioUnitario", "$items.costoUnitario"] } 
+                            ] 
+                        } 
+                    }
+                }
+            },
+            { $sort: { unidades: -1 } }, // Los más vendidos primero
+            { $limit: 5 } // Solo el Top 5
+        ]);
+        res.json(topProducts);
+    } catch (error) {
+        res.status(500).json({ error: 'Error en ranking de productos' });
+    }
+});
+
+module.exports = router;
+</file>
+
+<file path="routes/metrics.routes.js">
+const express = require('express');
+const router = express.Router();
+const MetricsController = require('../controllers/metrics.controller');
+const { verificarToken, permitirRoles } = require('../middlewares/auth.middleware');
+
+router.get('/dashboard', verificarToken, permitirRoles('admin'), MetricsController.getDashboardMetrics);
+
+module.exports = router;
+</file>
+
+<file path="routes/products.js">
+const express = require('express');
+const router = express.Router();
+const Product = require('../models/Product');
+const { isAdmin, verificarToken } = require('../src/middlewares/auth.middleware');
+
+// GET: Obtener menú completo (Público)
+router.get('/', async (req, res) => {
+  try {
+    const products = await Product.find().populate('receta.insumo');
+    // Agrupar por categoría para el frontend
+    const menu = { hamburguesas: [], extras: [] };
+    products.forEach(p => {
+      if (menu[p.categoria]) menu[p.categoria].push(p);
+      else menu[p.categoria] = [p]; // Por si creas nuevas categorias
+    });
+    res.json(menu);
+  } catch (error) { res.status(500).json({ error: 'Error cargando menú' }); }
+});
+
+// POST: Crear/Editar producto (Solo Admin)
+router.post('/', verificarToken, isAdmin, async (req, res, next) => {
+  try {
+    const { id, nombre, categoria, precios, precioUnitario, ingredientes, adicionales, receta } = req.body;
+    
+    // Upsert: Si existe actualiza, si no crea
+    const product = await Product.findOneAndUpdate(
+      { id },
+      { nombre, categoria, precios, precioUnitario, ingredientes, adicionales, receta },
+      { new: true, upsert: true }
+    );
+    res.json({ success: true, data: product });
+  } catch (error) { next(error); }
+});
+
+// DELETE: Eliminar producto (Solo Admin)
+router.delete('/:id', verificarToken, isAdmin, async (req, res, next) => {
+  try {
+    await Product.findOneAndDelete({ id: req.params.id });
+    res.json({ success: true, message: 'Producto eliminado' });
+  } catch (error) { next(error); }
+});
+
+module.exports = router;
+</file>
+
+<file path="routes/users.js">
+const express = require('express');
+const router = express.Router();
+const Usuario = require('../models/Usuario');
+const bcrypt = require('bcryptjs');
+const { isAdmin, verificarToken } = require('../src/middlewares/auth.middleware');
+
+router.use(verificarToken);
+router.use(isAdmin);
+
+// GET: Listar todos los usuarios (sin contraseña)
+router.get('/', async (req, res, next) => {
+  try {
+    const users = await Usuario.find({}, '-password').sort({ role: 1 });
+    res.json(users);
+  } catch (error) { next(error); }
+});
+
+// POST: Crear nuevo usuario
+router.post('/', async (req, res, next) => {
+  try {
+    const { username, password, role } = req.body;
+    if (!username || !password || !role) return res.status(400).json({ message: 'Faltan datos' });
+    
+    const hash = await bcrypt.hash(password, 10);
+    const nuevoUsuario = new Usuario({ username, password: hash, role });
+    await nuevoUsuario.save();
+    res.json({ success: true, message: 'Usuario creado' });
+  } catch (error) { next(error); }
+});
+
+// DELETE: Eliminar usuario
+router.delete('/:id', async (req, res, next) => {
+  try {
+    await Usuario.findByIdAndDelete(req.params.id);
+    res.json({ success: true, message: 'Usuario eliminado' });
+  } catch (error) { next(error); }
+});
+
+module.exports = router;
+</file>
+
+<file path="scripts/limpiar_db.js">
+require('dotenv').config();
+const mongoose = require('mongoose');
+const Pedido = require('../models/Pedido');
+const Merma = require('../models/Merma');
+
+async function limpiar() {
+  try {
+    // Ajusta la cadena de conexión si es necesario
+    await mongoose.connect('mongodb://127.0.0.1:27017/prueba_wifi');
+    console.log('🟢 Conectado a BD');
+
+    // 1. Eliminar todas las órdenes (limpieza total de ventas)
+    const pedidos = await Pedido.deleteMany({});
+    console.log(`🧹 Se eliminaron ${pedidos.deletedCount} órdenes (historial de ventas).`);
+
+    // 2. Opcional: Eliminar mermas
+    const mermas = await Merma.deleteMany({});
+    console.log(`🧹 Se eliminaron ${mermas.deletedCount} registros de merma.`);
+
+    console.log('✅ Base de datos depurada correctamente.');
+    process.exit(0);
+  } catch (error) {
+    console.error('🔴 Error:', error);
+    process.exit(1);
+  }
+}
+
+limpiar();
+</file>
+
+<file path="scripts/seed_inventory.js">
+/**
+ * Archivo: scripts/seed_inventory.js
+ * Ejecución: node scripts/seed_inventory.js
+ */
+
+require('dotenv').config();
+const mongoose = require('mongoose');
+const Inventory = require('../models/Inventory');
+const Product = require('../models/Product');
+
+// Ajusta tu conexión si es necesario
+const MONGO_URI = 'mongodb://127.0.0.1:27017/prueba_wifi';
+
+const seedInventory = async () => {
+  try {
+    await mongoose.connect(MONGO_URI);
+    console.log('🟢 Conectado a MongoDB para Seeding...');
+
+    // Cálculos basados en: 50 Hamburguesas + 30 Hotdogs
+    const insumos = [
+      // --- PANADERÍA ---
+      { 
+        nombre: 'Pan para Hamburguesa', 
+        cantidad: 55, // 50 ordenes + 5 margen
+        unidad: 'pza', 
+        stockMinimo: 10, 
+        seccion: 'General' 
+      },
+      { 
+        nombre: 'Pan para Hot Dog', 
+        cantidad: 35, // 30 ordenes + 5 margen
+        unidad: 'pza', 
+        stockMinimo: 10, 
+        seccion: 'General' 
+      },
+
+      // --- PROTEÍNAS ---
+      { 
+        nombre: 'Carne de Res', 
+        cantidad: 4500, // 50 burgers * 90g = 4500g
+        unidad: 'g', 
+        stockMinimo: 1000, 
+        seccion: 'General' 
+      },
+      { 
+        nombre: 'Salchicha', 
+        cantidad: 35, // 30 ordenes + 5 margen
+        unidad: 'pza', 
+        stockMinimo: 10, 
+        seccion: 'General' 
+      },
+      { 
+        nombre: 'Tocino', 
+        cantidad: 1000, // Estima para ~30 ordenes con tocino (30 * 30g aprox)
+        unidad: 'g', 
+        stockMinimo: 250, 
+        seccion: 'General' 
+      },
+      { 
+        nombre: 'Jamón', 
+        cantidad: 20, // Estima para 20 Hawaianas
+        unidad: 'pza', 
+        stockMinimo: 5, 
+        seccion: 'General' 
+      },
+
+      // --- LÁCTEOS Y EXTRAS ---
+      { 
+        nombre: 'Queso Amarillo', 
+        cantidad: 50, // Paquete estándar
+        unidad: 'pza', 
+        stockMinimo: 10, 
+        seccion: 'General' 
+      },
+      { 
+        nombre: 'Piña en Almíbar', 
+        cantidad: 20, // Estima para 20 Hawaianas (Rebanadas)
+        unidad: 'pza', 
+        stockMinimo: 5, 
+        seccion: 'General' 
+      },
+
+      // --- VERDURAS (Calculado por peso promedio) ---
+      { 
+        nombre: 'Jitomate', 
+        cantidad: 3000, // 50 burgers (2 reb) + 30 hotdogs (picado) ≈ 2.5kg -> Cerramos en 3kg
+        unidad: 'g', 
+        stockMinimo: 500, 
+        seccion: 'General' 
+      },
+      { 
+        nombre: 'Cebolla', 
+        cantidad: 2000, // 50 burgers (2 aros) + 30 hotdogs (picada) ≈ 1.5kg -> Cerramos en 2kg
+        unidad: 'g', 
+        stockMinimo: 500, 
+        seccion: 'General' 
+      },
+      { 
+        nombre: 'Lechuga', 
+        cantidad: 50, // 1 hoja por burger. Usamos 'pza' (hojas) para facilitar conteo, o 'g' si pesas.
+        unidad: 'pza', 
+        stockMinimo: 10, 
+        seccion: 'General' 
+      },
+      { 
+        nombre: 'Chiles Jalapeños', 
+        cantidad: 1500, // 1.5kg (Lata grande)
+        unidad: 'g', 
+        stockMinimo: 300, 
+        seccion: 'General' 
+      },
+
+      // --- ADEREZOS ---
+      { nombre: 'Mayonesa', cantidad: 1000, unidad: 'g', stockMinimo: 200, seccion: 'General' },
+      { nombre: 'Mostaza', cantidad: 1000, unidad: 'g', stockMinimo: 200, seccion: 'General' },
+      { nombre: 'Catsup', cantidad: 2000, unidad: 'g', stockMinimo: 500, seccion: 'General' },
+
+      // --- REFRESCOS (Familia Coca-Cola) ---
+      { nombre: 'Coca-Cola 600ml', cantidad: 24, unidad: 'pza', stockMinimo: 6, seccion: 'Bebidas' },
+      { nombre: 'Coca-Cola Light 600ml', cantidad: 12, unidad: 'pza', stockMinimo: 4, seccion: 'Bebidas' },
+      { nombre: 'Coca-Cola Zero 600ml', cantidad: 12, unidad: 'pza', stockMinimo: 4, seccion: 'Bebidas' },
+      { nombre: 'Sprite 600ml', cantidad: 12, unidad: 'pza', stockMinimo: 4, seccion: 'Bebidas' },
+      { nombre: 'Fanta 600ml', cantidad: 12, unidad: 'pza', stockMinimo: 4, seccion: 'Bebidas' },
+      { nombre: 'Sidral Mundet 600ml', cantidad: 12, unidad: 'pza', stockMinimo: 4, seccion: 'Bebidas' }
+    ];
+
+    console.log(`📦 Procesando ${insumos.length} insumos...`);
+    
+    // Mapa para guardar referencias de IDs de inventario
+    const inventoryMap = {};
+
+    for (const item of insumos) {
+      const doc = await Inventory.findOneAndUpdate(
+        { nombre: item.nombre }, // Buscar por nombre
+        { $set: item },          // Actualizar con los nuevos datos
+        { upsert: true, new: true } // Crear si no existe
+      );
+      inventoryMap[item.nombre] = doc._id;
+    }
+
+    console.log('✅ Inventario actualizado.');
+
+    // --- 2. ACTUALIZAR PRODUCTOS Y VINCULAR RECETAS ---
+    console.log('🍔 Vinculando Recetas a Productos...');
+
+    const productos = [
+      {
+        id: "h_sencilla", nombre: "Hamburguesa Sencilla", categoria: "hamburguesas",
+        precios: {"1": 70, "2": 120, "3": 160},
+        receta: [
+          { insumo: inventoryMap['Pan para Hamburguesa'], cantidad: 1 },
+          { insumo: inventoryMap['Carne de Res'], cantidad: 90 }, // gramos
+          { insumo: inventoryMap['Jitomate'], cantidad: 40 },
+          { insumo: inventoryMap['Cebolla'], cantidad: 20 },
+          { insumo: inventoryMap['Lechuga'], cantidad: 1 },
+          { insumo: inventoryMap['Mayonesa'], cantidad: 10 },
+          { insumo: inventoryMap['Catsup'], cantidad: 10 }
+        ]
+      },
+      {
+        id: "h_hawaiana", nombre: "Hamburguesa Hawaiana", categoria: "hamburguesas",
+        precios: {"1": 85, "2": 150, "3": 210},
+        receta: [
+          { insumo: inventoryMap['Pan para Hamburguesa'], cantidad: 1 },
+          { insumo: inventoryMap['Carne de Res'], cantidad: 90 },
+          { insumo: inventoryMap['Jamón'], cantidad: 1 },
+          { insumo: inventoryMap['Piña en Almíbar'], cantidad: 1 },
+          { insumo: inventoryMap['Queso Amarillo'], cantidad: 1 },
+          { insumo: inventoryMap['Mayonesa'], cantidad: 10 }
+        ]
+      },
+      {
+        id: "hotdog_sencillo", nombre: "Hot Dog Sencillo", categoria: "hamburguesas",
+        precios: {"1": 30, "2": 55, "3": 70},
+        receta: [
+          { insumo: inventoryMap['Pan para Hot Dog'], cantidad: 1 },
+          { insumo: inventoryMap['Salchicha'], cantidad: 1 },
+          { insumo: inventoryMap['Jitomate'], cantidad: 20 },
+          { insumo: inventoryMap['Cebolla'], cantidad: 10 },
+          { insumo: inventoryMap['Mayonesa'], cantidad: 5 },
+          { insumo: inventoryMap['Catsup'], cantidad: 5 }
+        ]
+      },
+      // --- REFRESCOS COMO PRODUCTOS ---
+      { id: "ref_coca", nombre: "Coca-Cola 600ml", categoria: "extras", precioUnitario: 25, receta: [{ insumo: inventoryMap['Coca-Cola 600ml'], cantidad: 1 }] },
+      { id: "ref_light", nombre: "Coca-Cola Light", categoria: "extras", precioUnitario: 25, receta: [{ insumo: inventoryMap['Coca-Cola Light 600ml'], cantidad: 1 }] },
+      { id: "ref_zero", nombre: "Coca-Cola Zero", categoria: "extras", precioUnitario: 25, receta: [{ insumo: inventoryMap['Coca-Cola Zero 600ml'], cantidad: 1 }] },
+      { id: "ref_sprite", nombre: "Sprite", categoria: "extras", precioUnitario: 25, receta: [{ insumo: inventoryMap['Sprite 600ml'], cantidad: 1 }] },
+      { id: "ref_fanta", nombre: "Fanta", categoria: "extras", precioUnitario: 25, receta: [{ insumo: inventoryMap['Fanta 600ml'], cantidad: 1 }] }
+    ];
+
+    for (const prod of productos) {
+      await Product.findOneAndUpdate(
+        { id: prod.id },
+        { 
+          $set: { 
+            nombre: prod.nombre, 
+            categoria: prod.categoria, 
+            precios: prod.precios, 
+            precioUnitario: prod.precioUnitario,
+            receta: prod.receta 
+          } 
+        },
+        { upsert: true }
+      );
+    }
+
+    console.log('✅ Productos y Recetas actualizados.');
+    console.log('📊 Todo listo. Reinicia el servidor para ver los cambios.');
+    
+    process.exit(0);
+
+  } catch (error) {
+    console.error('\n🔴 Error al poblar inventario:', error);
+    process.exit(1);
+  }
+};
+
+seedInventory();
+</file>
+
+<file path="src/config/db.js">
+const mongoose = require('mongoose');
+
+const connectDB = async () => {
+  try {
+    const mongoOptions = {
+      maxPoolSize: 10,
+      serverSelectionTimeoutMS: 5000,
+    };
+    await mongoose.connect('mongodb://127.0.0.1:27017/prueba_wifi', mongoOptions);
+    console.log('🟢 MongoDB conectado');
+  } catch (err) {
+    console.error('🔴 Error Mongo:', err);
+    process.exit(1);
+  }
+};
+
+module.exports = connectDB;
+</file>
+
+<file path="src/controllers/inventory.controller.js">
+const Inventory = require('../../models/Inventory');
+
+const getInventory = async (req, res) => {
+    try {
+        const items = await Inventory.find().sort({ nombre: 1 });
+        console.log(`📦 Inventario solicitado: ${items.length} items encontrados.`); // LOG NUEVO
+        res.json(items);
+    } catch (error) {
+        res.status(500).json({ error: 'Error al obtener inventario' });
+    }
+};
+
+const createItem = async (req, res) => {
+    try {
+        console.log("📦 Intentando crear insumo:", req.body); // LOG PARA DEPURAR
+        const newItem = new Inventory(req.body);
+        await newItem.save();
+        console.log("✅ Insumo guardado con éxito:", newItem.nombre); // LOG CONFIRMACIÓN
+        res.json({ success: true, item: newItem });
+    } catch (error) {
+        console.error("🔴 Error creando insumo:", error.message);
+        res.status(400).json({ error: 'Error creando insumo: ' + error.message });
+    }
+};
+
+const updateItem = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const updatedItem = await Inventory.findByIdAndUpdate(id, req.body, { new: true });
+        res.json({ success: true, item: updatedItem });
+    } catch (error) {
+        console.error("🔴 Error actualizando insumo:", error.message);
+        res.status(400).json({ error: 'Error actualizando insumo' });
+    }
+};
+
+const deleteItem = async (req, res) => {
+    try {
+        await Inventory.findByIdAndDelete(req.params.id);
+        res.json({ success: true, message: 'Insumo eliminado' });
+    } catch (error) {
+        res.status(400).json({ error: 'Error eliminando insumo' });
+    }
+};
+
+module.exports = { getInventory, createItem, updateItem, deleteItem };
+</file>
+
+<file path="src/controllers/metrics.controller.js">
+const MetricsService = require('../services/metrics.service');
+const Sale = require('../../models/Sale');
+
+const getDashboardMetrics = async (req, res) => {
+    const { start, end } = req.query;
+    
+    // Si no hay fechas, usar el mes actual
+    const startDate = start ? new Date(start) : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+    const endDate = end ? new Date(end) : new Date();
+
+    try {
+        const metrics = await MetricsService.obtenerMetricasAvanzadas(startDate, endDate);
+        res.json(metrics);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+};
+
+// --- NUEVOS REPORTES FINANCIEROS ---
+
+const getFinancials = async (req, res) => {
+    try {
+        const { start, end } = req.query;
+        const startDate = start ? new Date(start) : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+        const endDate = end ? new Date(end) : new Date();
+
+        const financials = await Sale.aggregate([
+            { $match: { fecha: { $gte: startDate, $lte: endDate } } },
+            {
+                $group: {
+                    _id: null,
+                    ingresoTotal: { $sum: "$totalVenta" },
+                    costoTotal: { $sum: "$totalCosto" },
+                    gananciaNeta: { $sum: "$gananciaNeta" },
+                    ticketPromedio: { $avg: "$totalVenta" },
+                    totalTransacciones: { $sum: 1 }
+                }
+            }
+        ]);
+
+        res.json(financials[0] || { ingresoTotal: 0, costoTotal: 0, gananciaNeta: 0 });
+    } catch (error) {
+        res.status(500).json({ error: 'Error calculando finanzas' });
+    }
+};
+
+const getCategories = async (req, res) => {
+    try {
+        const categoryStats = await Sale.aggregate([
+            { $unwind: "$items" },
+            {
+                $group: {
+                    _id: "$items.categoria",
+                    cantidadVendida: { $sum: "$items.cantidad" },
+                    dineroGenerado: { $sum: { $multiply: ["$items.cantidad", "$items.precioUnitario"] } }
+                }
+            },
+            { $sort: { cantidadVendida: -1 } }
+        ]);
+        res.json(categoryStats);
+    } catch (error) {
+        res.status(500).json({ error: 'Error en reporte de categorías' });
+    }
+};
+
+const getTopProducts = async (req, res) => {
+    try {
+        const topProducts = await Sale.aggregate([
+            { $unwind: "$items" },
+            {
+                $group: {
+                    _id: "$items.nombre",
+                    unidades: { $sum: "$items.cantidad" },
+                    gananciaGenerada: { 
+                        $sum: { 
+                            $multiply: [
+                                "$items.cantidad", 
+                                { $subtract: ["$items.precioUnitario", "$items.costoUnitario"] } 
+                            ] 
+                        } 
+                    }
+                }
+            },
+            { $sort: { unidades: -1 } },
+            { $limit: 5 }
+        ]);
+        res.json(topProducts);
+    } catch (error) {
+        res.status(500).json({ error: 'Error en ranking de productos' });
+    }
+};
+
+// 4. Ventas por Hora (Promedio Diario / Hoy)
+const getDailyAverage = async (req, res) => {
+    try {
+        const start = new Date();
+        start.setHours(0, 0, 0, 0);
+        const end = new Date();
+        end.setHours(23, 59, 59, 999);
+
+        const sales = await Sale.aggregate([
+            { $match: { fecha: { $gte: start, $lte: end } } },
+            { $group: { _id: { $hour: "$fecha" }, totalVentas: { $sum: "$totalVenta" } } },
+            { $sort: { "_id": 1 } }
+        ]);
+
+        // Rellenar las horas vacías (0 a 23)
+        const data = Array.from({ length: 24 }, (_, i) => {
+            const found = sales.find(s => s._id === i);
+            return { hora: i, totalVentas: found ? found.totalVentas : 0 };
+        });
+
+        res.json({ success: true, data });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+module.exports = { getDashboardMetrics, getFinancials, getCategories, getTopProducts, getDailyAverage };
+</file>
+
+<file path="src/middlewares/auth.middleware.js">
+const jwt = require('jsonwebtoken');
+
+const JWT_SECRET = process.env.JWT_SECRET || 'secreto_super_seguro_cambiar_en_produccion';
+
+const verificarToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+  
+  if (!token) return res.status(401).json({ error: 'Acceso denegado: No hay token' });
+
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) return res.status(403).json({ error: 'Acceso denegado: Token inválido o expirado' });
+    req.user = user;
+    next();
+  });
+};
+
+const permitirRoles = (...roles) => {
+  return (req, res, next) => {
+    if (!roles.includes(req.user.role)) return res.status(403).json({ error: 'No tienes permisos suficientes' });
+    next();
+  };
+};
+
+const isAdmin = (req, res, next) => {
+  if (req.user && req.user.role === 'admin') {
+    next();
+  } else {
+    return res.status(403).json({ 
+      success: false, 
+      message: '⛔ Acceso denegado: Se requieren privilegios de administrador.' 
+    });
+  }
+};
+
+module.exports = { verificarToken, permitirRoles, isAdmin, JWT_SECRET };
+</file>
+
+<file path="src/routes/inventory.routes.js">
+const express = require('express');
+const router = express.Router();
+const InventoryController = require('../controllers/inventory.controller');
+const { verificarToken, permitirRoles } = require('../middlewares/auth.middleware');
+
+// Rutas CRUD protegidas
+router.get('/', verificarToken, permitirRoles('admin', 'cook'), InventoryController.getInventory);
+router.post('/', verificarToken, permitirRoles('admin'), InventoryController.createItem);
+router.put('/:id', verificarToken, permitirRoles('admin'), InventoryController.updateItem);
+router.delete('/:id', verificarToken, permitirRoles('admin'), InventoryController.deleteItem);
+
+module.exports = router;
+</file>
+
+<file path="src/routes/metrics.routes.js">
+const express = require('express');
+const router = express.Router();
+const MetricsController = require('../controllers/metrics.controller');
+const { verificarToken, permitirRoles } = require('../middlewares/auth.middleware');
+
+router.get('/dashboard', verificarToken, permitirRoles('admin'), MetricsController.getDashboardMetrics);
+router.get('/financials', verificarToken, permitirRoles('admin'), MetricsController.getFinancials);
+router.get('/categories', verificarToken, permitirRoles('admin'), MetricsController.getCategories);
+router.get('/top-products', verificarToken, permitirRoles('admin'), MetricsController.getTopProducts);
+router.get('/daily-average', verificarToken, permitirRoles('admin'), MetricsController.getDailyAverage);
+
+module.exports = router;
+</file>
+
+<file path="src/services/metrics.service.js">
+const Pedido = require('../../models/Pedido');
+
+const MetricsService = {
+  obtenerMetricasAvanzadas: async (fechaInicio, fechaFin) => {
+    const pipeline = [
+      {
+        $match: {
+          fecha: { $gte: new Date(fechaInicio), $lte: new Date(fechaFin) },
+          status: 'COMPLETED' // Solo ventas reales
+        }
+      },
+      { $unwind: "$items" }, // Desglosar items
+      {
+        $group: {
+          _id: "$items.id", // Agrupar por ID de producto (ej. "h_sencilla")
+          nombre: { $first: "$items.nombre" },
+          totalVendido: { $sum: "$items.qty" },
+          // Nota: Idealmente el precio debería guardarse en el item del pedido para exactitud histórica
+          ingresoTotal: { $sum: { $multiply: ["$items.qty", "$items.precioUnitario"] } }, 
+          horasVenta: { $push: { $hour: "$fecha" } } // Guardar horas para mapa de calor
+        }
+      },
+      { $sort: { totalVendido: -1 } }
+    ];
+
+    const reporte = await Pedido.aggregate(pipeline);
+    
+    // Post-procesamiento para Insights
+    return reporte.map(prod => {
+      // Calcular hora pico (moda)
+      const horasMap = {};
+      let maxFrecuencia = 0;
+      let horaPico = 0;
+      prod.horasVenta.forEach(h => {
+        horasMap[h] = (horasMap[h] || 0) + 1;
+        if (horasMap[h] > maxFrecuencia) {
+          maxFrecuencia = horasMap[h];
+          horaPico = h;
+        }
+      });
+
+      return {
+        producto: prod.nombre,
+        unidades: prod.totalVendido,
+        horaPico: `${horaPico}:00`,
+        analisis: analizarRendimiento(prod.totalVendido)
+      };
+    });
+  }
+};
+
+function analizarRendimiento(cantidad) {
+  if (cantidad > 50) return "🔥 ESTRELLA (Alta rotación)";
+  if (cantidad > 20) return "✅ CONSTANTE";
+  return "⚠️ LENTO (Considerar promoción)";
+}
+
+module.exports = MetricsService;
+</file>
+
+<file path="src/services/socket.service.js">
+const { Server } = require('socket.io');
+
+let io;
+
+module.exports = {
+  init: (httpServer) => {
+    io = new Server(httpServer, { cors: { origin: "*" } });
+    return io;
+  },
+  getIO: () => {
+    if (!io) {
+      throw new Error("Socket.io no inicializado");
+    }
+    return io;
+  }
+};
+</file>
+
+<file path="src/app.js">
+const express = require('express');
+const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+const mongoSanitize = require('express-mongo-sanitize');
+const path = require('path');
+
+// Importar Rutas
+const metricsRoutes = require('./routes/metrics.routes');
+const inventoryRoutes = require('./routes/inventory.routes');
+
+const app = express();
+
+// --- MIDDLEWARES GLOBALES ---
+app.use(cors());
+app.use(helmet({
+  contentSecurityPolicy: false, 
+}));
+
+const limiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 500 });
+app.use(limiter);
+
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+app.use((req, res, next) => {
+  req.body = mongoSanitize.sanitize(req.body);
+  req.params = mongoSanitize.sanitize(req.params);
+  next();
+});
+
+app.use(express.static(path.join(__dirname, '../public')));
+
+// --- RUTAS API ---
+app.use('/api/metrics', metricsRoutes);
+app.use('/api/inventory', inventoryRoutes);
+
+// Rutas legacy (se migrarán poco a poco, por ahora se cargan en server.js o aquí)
+// Para mantener compatibilidad mientras migras, las rutas viejas se pueden montar en server.js
+// o importarlas aquí si las mueves a src/routes/
+
+module.exports = app;
+</file>
+
+<file path="package.json">
+{
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "body-parser": "^2.2.2",
+    "cors": "^2.8.6",
+    "dotenv": "^17.2.3",
+    "express": "^5.2.1",
+    "express-mongo-sanitize": "^2.2.0",
+    "express-rate-limit": "^8.2.1",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^9.1.5",
+    "node-cron": "^4.2.1",
+    "socket.io": "^4.8.3"
+  }
+}
+</file>
+
+<file path="server.js">
+require('dotenv').config(); // Cargar variables de entorno
+const os = require('os');
+const path = require('path');
+const dgram = require('dgram'); // Necesario para interceptar solicitudes DNS
+const http = require('http');
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
+// const cluster = require('cluster'); // Desactivado para sincronización real
+const cron = require('node-cron');
+const rateLimit = require('express-rate-limit'); // Protección fuerza bruta
+// const morgan = require('morgan'); // Descomentar si está instalado
+
+// --- NUEVA ESTRUCTURA ---
+const app = require('./src/app');
+const connectDB = require('./src/config/db');
+const socketService = require('./src/services/socket.service');
+const StockManager = require('./models/StockManager');
+const { verificarToken, permitirRoles, JWT_SECRET } = require('./src/middlewares/auth.middleware');
+
+// Importar Modelos y Middleware
+const Usuario = require('./models/Usuario');
+const Pedido = require('./models/Pedido');
+const Inventory = require('./models/Inventory');
+const Product = require('./models/Product');
+const Sale = require('./models/Sale');
+
+const PORT = 80; // Puerto estándar web (Requerido para Portal Cautivo)
+
+// === SINGLE PROCESS MODE ===
+  const server = http.createServer(app);
+  const io = socketService.init(server); // Inicializar Socket.io
+
+// Detectar la IP local automáticamente (Mejorado para Routers)
+let localIP = '';
+const interfaces = os.networkInterfaces();
+const addresses = [];
+
+for (const name of Object.keys(interfaces)) {
+  for (const iface of interfaces[name]) {
+    if (iface.family === 'IPv4' && !iface.internal) {
+      addresses.push(iface.address);
+    }
+  }
+}
+
+// Prioridad: 1. Hotspot Linux (10.42...) -> 2. Router Casa (192.168...) -> 3. Cualquiera
+localIP = addresses.find(ip => ip.startsWith('10.42')) || 
+          addresses.find(ip => ip.startsWith('192.168')) || 
+          addresses[0] || 
+          '127.0.0.1';
+
+// Conexión a la base de datos que creamos en tu partición de Linux
+connectDB();
+
+// Inicializar usuarios por defecto si no existen
+async function initDB() {
+    // Solo el worker 1 intenta inicializar para evitar colisiones
+    // if (cluster.worker.id !== 1) return;
+
+    const hash = await bcrypt.hash('1234', 10);
+
+    const users = [
+      { username: 'admin', role: 'admin' },
+      { username: 'cajero', role: 'cashier' },
+      { username: 'cocina', role: 'cook' }
+    ];
+
+    for (const u of users) {
+      await Usuario.findOneAndUpdate({ username: u.username }, { password: hash, role: u.role }, { upsert: true });
+    }
+    console.log('👤 Usuarios de staff asegurados (pass: 1234)');
+
+    // Migrar Menú a Base de Datos si está vacía
+    const prodCount = await Product.countDocuments();
+    if (prodCount === 0) {
+      const defaultMenu = [
+        { id: "h_sencilla", nombre: "Hamburguesa Sencilla", categoria: "hamburguesas", precios: {"1": 70, "2": 120, "3": 160}, ingredientes: ["Cebolla", "Tomate", "Lechuga", "Mayonesa"], adicionales: [{nombre: "Queso Extra", precio: 10}] },
+        { id: "h_quesotocino", nombre: "Hamb. Queso/Tocino", categoria: "hamburguesas", precios: {"1": 80, "2": 140, "3": 190}, ingredientes: ["Cebolla", "Tomate", "Lechuga"], adicionales: [{nombre: "Carne Extra", precio: 20}] },
+        { id: "h_hawaiana", nombre: "Hamburguesa Hawaiana", categoria: "hamburguesas", precios: {"1": 85, "2": 150, "3": 210}, ingredientes: ["Piña", "Jamón", "Cebolla"], adicionales: [] },
+        { id: "hotdog_sencillo", nombre: "Hot Dog Sencillo", categoria: "hamburguesas", precios: {"1": 30, "2": 55, "3": 70}, ingredientes: ["Tomate", "Cebolla"], adicionales: [] },
+        { id: "hotdog_tocino", nombre: "Hot Dog con Tocino", categoria: "hamburguesas", precios: {"1": 35, "2": 60, "3": 75}, ingredientes: ["Tomate", "Cebolla"], adicionales: [] },
+        { id: "papas", nombre: "Orden de Papas", categoria: "extras", precioUnitario: 40, ingredientes: [], adicionales: [{nombre: "Queso Líquido", precio: 10}] },
+        { id: "ref_coca", nombre: "Coca-Cola 600ml", categoria: "extras", precioUnitario: 25, ingredientes: [], adicionales: [] },
+        { id: "ref_light", nombre: "Coca-Cola Light", categoria: "extras", precioUnitario: 25, ingredientes: [], adicionales: [] },
+        { id: "ref_zero", nombre: "Coca-Cola Zero", categoria: "extras", precioUnitario: 25, ingredientes: [], adicionales: [] },
+        { id: "ref_sprite", nombre: "Sprite", categoria: "extras", precioUnitario: 25, ingredientes: [], adicionales: [] },
+        { id: "ref_fanta", nombre: "Fanta", categoria: "extras", precioUnitario: 25, ingredientes: [], adicionales: [] }
+      ];
+      for (const p of defaultMenu) {
+        await Product.create(p);
+      }
+      console.log('🍔 Menú por defecto cargado en DB');
+    }
+}
+initDB();
+
+// Rutas de detección automática para celulares
+app.get('/generate_204', (req, res) => res.redirect('/')); // Android
+app.get('/hotspot-detect.html', (req, res) => res.redirect('/')); // iOS
+app.get('/check_network_status', (req, res) => res.redirect('/')); // Otros
+
+  // --- NUEVAS RUTAS MODULARIZADAS ---
+  // Metrics ya está en src/app.js
+  app.use('/api/users', require('./routes/users'));
+  app.use('/api/products', require('./routes/products'));
+
+// Configuración específica para limitar intentos de login (Fuerza Bruta)
+const loginLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000, // 10 minutos
+  max: 5, // Solo 5 intentos
+  message: { detail: "Demasiados intentos fallidos, espera 10 minutos." }
+});
+
+// --- API RUTAS ---
+
+// 1. Login (Para la App Flutter)
+app.post('/login', loginLimiter, async (req, res) => {
+  const { username, password } = req.body;
+  const user = await Usuario.findOne({ username });
+  
+  if (!user || !(await bcrypt.compare(password, user.password))) {
+    return res.status(401).json({ detail: 'Credenciales incorrectas' });
+  }
+
+  const token = jwt.sign({ id: user._id, role: user.role }, JWT_SECRET);
+  res.json({ access_token: token, role: user.role });
+});
+
+// 3. Crear Pedido (Desde el Portal Web)
+app.post('/api/pedido', async (req, res) => {
+  try {
+    const { nombre, tipo, items, total } = req.body;
+    const dispositivo = req.headers['user-agent'];
+    
+    // Generar número de orden (Reinicia cada día)
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0); // Establecer al inicio del día (00:00 AM)
+
+    const ultimaOrden = await Pedido.findOne().sort({ fecha: -1 });
+    let numeroOrden = 1;
+
+    if (ultimaOrden && ultimaOrden.numeroOrden && ultimaOrden.fecha >= hoy) {
+      numeroOrden = ultimaOrden.numeroOrden + 1;
+    }
+
+    // El status por defecto es 'PENDING_PAYMENT' según el Schema
+    const nuevoPedido = new Pedido({ numeroOrden, cliente: nombre, tipo, items, total, dispositivo });
+    await nuevoPedido.save();
+
+    console.log(`🍔 Pedido #${numeroOrden} recibido: ${nombre}`);
+    
+    // AVISAR AL CAJERO (Socket.io)
+    io.emit('nuevo-pedido', nuevoPedido);
+
+    res.json({ success: true, numeroOrden });
+  } catch (error) {
+    console.error('Error guardando pedido:', error);
+    res.status(500).json({ error: 'Error interno' });
+  }
+});
+
+// 4. Controlador de Pedidos: Actualizar Estado (State Machine)
+app.post('/api/pedido/:id/status', verificarToken, permitirRoles('admin', 'cashier', 'cook'), async (req, res) => {
+  try {
+    const { status } = req.body;
+    const pedido = await Pedido.findById(req.params.id);
+    const oldStatus = pedido.status;
+
+    if (!pedido) return res.status(404).json({ error: 'Pedido no encontrado' });
+
+    // Lógica de Transiciones Válidas
+    const validTransitions = {
+      'PENDING_PAYMENT': ['IN_KITCHEN', 'COMPLETED'], // COMPLETED por si se cancela/borra
+      'IN_KITCHEN': ['PREPARING', 'COMPLETED'],
+      'PREPARING': ['READY', 'COMPLETED'],
+      'READY': ['COMPLETED'],
+      'COMPLETED': []
+    };
+
+    // Validar si el paso es lógico
+    if (!validTransitions[pedido.status].includes(status) && req.user.role !== 'admin') {
+      return res.status(400).json({ 
+        error: `Transición inválida: No se puede pasar de ${pedido.status} a ${status}` 
+      });
+    }
+
+    // Aplicar cambio
+    pedido.status = status;
+    pedido.history.push({ status, user: req.user.role }); // Auditoría
+    await pedido.save();
+
+    // --- LÓGICA DE INVENTARIO ---
+    // Si el pedido entra a cocina (se confirma), descontamos los insumos
+    if (status === 'IN_KITCHEN' && oldStatus === 'PENDING_PAYMENT') {
+      try {
+        await StockManager.procesarSalidaDeStock(pedido);
+        console.log(`📉 Stock descontado para pedido #${pedido.numeroOrden}`);
+      } catch (err) {
+        console.error("🔴 Error descontando stock:", err.message);
+      }
+    }
+
+    // --- LÓGICA DE VENTAS Y FINANZAS ---
+    // Si el pedido se completa, registramos la venta financiera (Snapshot)
+    if (status === 'COMPLETED' && oldStatus !== 'COMPLETED') {
+      try {
+        let totalCosto = 0;
+        const saleItems = [];
+
+        for (const item of pedido.items) {
+          const product = await Product.findOne({ id: item.id });
+          const costo = product ? (product.costoProduccion || 0) : 0;
+          // Nota: Si el precio no está en el item, usamos el unitario del producto como fallback
+          const precioVenta = product ? (product.precioUnitario || 0) : 0; 
+          
+          totalCosto += (costo * item.qty);
+          saleItems.push({
+            productoId: product ? product._id : null,
+            nombre: item.nombre,
+            categoria: product ? product.categoria : 'otros',
+            cantidad: item.qty,
+            precioUnitario: precioVenta, // Idealmente esto vendría de pedido.items si guardaras el precio ahí
+            costoUnitario: costo
+          });
+        }
+
+        await Sale.create({
+          totalVenta: pedido.total,
+          totalCosto: totalCosto,
+          gananciaNeta: pedido.total - totalCosto,
+          metodoPago: 'efectivo', // Puedes agregar lógica para detectar tarjeta
+          usuario: req.user ? req.user.username : 'sistema',
+          items: saleItems
+        });
+        console.log(`💰 Venta registrada para pedido #${pedido.numeroOrden}`);
+      } catch (err) {
+        console.error("🔴 Error registrando venta:", err);
+      }
+    }
+    
+    // Notificación Real-Time
+    io.emit('actualizacion-pedido', pedido);
+    
+    res.json({ success: true, pedido });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Error actualizando' });
+  }
+});
+
+// 5. Listar Pedidos (PROTEGIDO: Solo Staff)
+app.get('/api/pedidos', verificarToken, permitirRoles('admin', 'cashier', 'cook'), async (req, res) => {
+  // Traer solo los del día de hoy
+  const hoy = new Date();
+  hoy.setHours(0,0,0,0);
+  // Excluir completados de la vista activa (opcional, según preferencia)
+  const pedidos = await Pedido.find({ fecha: { $gte: hoy }, status: { $ne: 'COMPLETED' } }).sort({ fecha: -1 });
+  res.json(pedidos);
+});
+
+// 6. Verificar Estado (Público - Para sincronizar cliente)
+app.get('/api/pedido/:id/status', async (req, res) => {
+  try {
+    const pedido = await Pedido.findOne({ numeroOrden: req.params.id });
+    if (!pedido) return res.status(404).json({ error: 'No encontrado' });
+    res.json({ estado: pedido.status }); // Mantenemos la clave 'estado' para compatibilidad frontend o cambiamos a status
+  } catch (error) { res.status(500).json({ error: 'Error' }); }
+});
+
+// Redirigir cualquier otra ruta a la página principal (útil para Kioskos)
+app.get(/.*/, (req, res) => {
+  // console.log(`👀 Nuevo visitante detectado desde: ${req.ip}`);
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+  // --- TAREA CRON ---
+  // if (cluster.worker.id === 1) {
+    cron.schedule('0 9 * * *', async () => {
+      try {
+        const faltantes = await Inventory.obtenerFaltantes();
+        if (faltantes.length > 0) {
+          console.log("⚠️ ALERTA STOCK:", faltantes.map(f => f.nombre));
+        }
+      } catch (e) { console.error("Error cron:", e); }
+    });
+  // }
+
+// --- TAREA CRON: LIMPIEZA DE PEDIDOS ---
+cron.schedule('* * * * *', async () => { // Se ejecuta cada minuto
+  try {
+    const unaHoraAtras = new Date(Date.now() - 60 * 60 * 1000);
+    const resultado = await Pedido.deleteMany({ 
+      status: 'PENDING_PAYMENT', 
+      fecha: { $lt: unaHoraAtras } 
+    });
+    if (resultado.deletedCount > 0) {
+      console.log(`🧹 Limpieza: Se borraron ${resultado.deletedCount} pedidos pendientes sin pagar.`);
+    }
+  } catch (error) { console.error('Error limpieza cron:', error); }
+});
+
+// --- SOCKET.IO (Tiempo Real) ---
+io.on('connection', (socket) => {
+    // console.log('🔌 Cliente conectado:', socket.id);
+    // socket.on('disconnect', () => console.log('❌ Cliente desconectado'));
+});
+
+server.listen(PORT, '0.0.0.0', () => {
+    console.log('🚀 Servidor listo.');
+    console.log(`📡 Accesible localmente en: http://localhost:${PORT}`);
+    console.log(`📲 IP para conectar: http://${localIP}`);
+
+  // --- SERVIDOR DNS (Necesario si configuraste el DHCP del Router) ---
+  // Si el router dice "El DNS es 192.168.x.x", este código debe responder.
+  const DNS_PORT = 5300;
+  const dnsServer = dgram.createSocket('udp4');
+
+  dnsServer.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+        // console.log('⚠️ AVISO: El puerto 5300 está ocupado.');
+    } else {
+        // console.log(`⚠️ Error DNS: ${err.stack}`);
+    }
+    dnsServer.close();
+  });
+
+  dnsServer.on('message', (msg, rinfo) => {
+    const ip = localIP.split('.').map(Number);
+    const response = Buffer.alloc(msg.length + 16);
+    msg.copy(response, 0, 0, msg.length);
+    
+    // Responder a todo con nuestra IP (Spoofing)
+    response[2] = 0x81; response[3] = 0x80;
+    response[6] = 0x00; response[7] = 0x01;
+    response[8] = 0x00; response[9] = 0x00; response[10] = 0x00; response[11] = 0x00;
+
+    const offset = msg.length;
+    response.writeUInt16BE(0xC00C, offset);
+    response.writeUInt16BE(0x0001, offset + 2);
+    response.writeUInt16BE(0x0001, offset + 4);
+    response.writeUInt32BE(60, offset + 6);
+    response.writeUInt16BE(4, offset + 10);
+    response.set(ip, offset + 12);
+
+    dnsServer.send(response, rinfo.port, rinfo.address);
+  });
+
+    dnsServer.bind(DNS_PORT, '0.0.0.0', () => {
+      console.log('🌐 Servidor DNS activo en puerto 5300. (Esperando redirección iptables)');
+    });
+});
+// }
+</file>
+
+</files>

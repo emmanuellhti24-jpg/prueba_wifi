@@ -1,0 +1,59 @@
+.
+├── middleware
+│   └── auth.js
+├── models
+│   ├── Inventory.js
+│   ├── Merma.js
+│   ├── Pedido.js
+│   ├── Product.js
+│   ├── Sale.js
+│   ├── StockManager.js
+│   ├── Supplier.js
+│   └── Usuario.js
+├── public
+│   ├── css
+│   │   └── staff.css
+│   ├── js
+│   │   └── staff.js
+│   ├── admin.html
+│   ├── admin.js
+│   ├── index.html
+│   ├── limpiar_db.js
+│   ├── staff.html
+│   └── styles.css
+├── __pycache__
+│   ├── auth.cpython-312.pyc
+│   └── database.cpython-312.pyc
+├── routes
+│   ├── inventory.js
+│   ├── metrics.js
+│   ├── metrics.routes.js
+│   ├── products.js
+│   └── users.js
+├── scripts
+│   ├── limpiar_db.js
+│   └── seed_inventory.js
+├── src
+│   ├── config
+│   │   └── db.js
+│   ├── controllers
+│   │   ├── inventory.controller.js
+│   │   └── metrics.controller.js
+│   ├── middlewares
+│   │   └── auth.middleware.js
+│   ├── models
+│   ├── routes
+│   │   ├── inventory.routes.js
+│   │   └── metrics.routes.js
+│   ├── services
+│   │   ├── metrics.service.js
+│   │   └── socket.service.js
+│   ├── utils
+│   └── app.js
+├── mapa_proyecto.txt
+├── package.json
+├── package-lock.json
+├── repomix-output.xml
+└── server.js
+
+17 directories, 40 files
