@@ -3,6 +3,7 @@ let token = localStorage.getItem('token');
 let role = localStorage.getItem('role');
 let socket;
 
+let charts = {}; // Almacenar instancias de gráficas
 // --- ESTADO Y CACHÉ ---
 let currentRecipe = [];
 let inventoryList = [];
@@ -62,6 +63,7 @@ function switchTab(tabName) {
     if (tabName === 'menu') loadMenu();
     if (tabName === 'inventory') loadInventory();
     if (tabName === 'users') loadUsers();
+    if (tabName === 'staff') loadStaff();
     if (tabName === 'metrics') loadMetrics();
 }
 
@@ -86,11 +88,10 @@ async function loadMenu() {
     document.getElementById('menu-table-body').innerHTML = allProds.map(p => `
         <tr>
             <td><img src="${p.imagen || 'https://via.placeholder.com/40'}" width="40" height="40" class="me-2 rounded" style="object-fit: cover;"> ${p.nombre}</td>
-            <td><span class="badge bg-info text-dark">${p.categoria}</span></td>
+            <td><span class="badge bg-primary">${p.categoria}</span></td>
             <td>${p.precios?.['1'] ? `1:$${p.precios['1']} | 2:$${p.precios['2']}` : `$${p.precioUnitario}`}</td>
-            <td>
-                <button class="btn btn-sm btn-outline-primary btn-icon" onclick='editProduct(${JSON.stringify(p)})'><i class="fas fa-pencil-alt"></i></button>
-                <button class="btn btn-sm btn-outline-danger btn-icon" onclick="deleteProduct('${p.id}')"><i class="fas fa-trash"></i></button>
+            <td class="action-column">
+                <button class="action-btn" onclick="deleteProduct('${p.id}')">🗑️</button>
             </td>
         </tr>
     `).join('');
@@ -104,9 +105,8 @@ async function loadInventory() {
             <td>${i.nombre}</td>
             <td>${i.cantidad} ${i.unidad}</td>
             <td><span class="badge ${i.cantidad < i.minimo ? 'bg-danger' : 'bg-success'}">${i.cantidad < i.minimo ? 'BAJO' : 'OK'}</span></td>
-            <td>
-                <button class="btn btn-sm btn-outline-primary btn-icon" onclick='openInventoryModal(${JSON.stringify(i)})'><i class="fas fa-pencil-alt"></i></button>
-                <button class="btn btn-sm btn-outline-danger btn-icon" onclick="deleteInv('${i._id}')"><i class="fas fa-trash"></i></button>
+            <td class="action-column">
+                <button class="action-btn" onclick="deleteInv('${i._id}')">🗑️</button>
             </td>
         </tr>
     `).join('');
@@ -119,19 +119,103 @@ async function loadUsers() {
         <tr>
             <td>${u.username}</td>
             <td><span class="badge bg-secondary">${u.role}</span></td>
-            <td>${u.role !== 'admin' ? `<button class="btn btn-sm btn-outline-danger btn-icon" onclick="deleteUser('${u._id}')"><i class="fas fa-trash"></i></button>` : ''}</td>
+            <td class="action-column">${u.role !== 'admin' ? `<button class="action-btn" onclick="deleteUser('${u._id}')">🗑️</button>` : ''}</td>
+        </tr>
+    `).join('');
+}
+
+async function loadStaff() {
+    const res = await fetch(`${API_URL}/staff`, { headers: { 'Authorization': `Bearer ${token}` } });
+    const staffList = await res.json();
+    document.querySelector('#staff-table tbody').innerHTML = staffList.data.map(s => `
+        <tr>
+            <td>${s.nombre} ${s.apellido}</td>
+            <td><span class="badge bg-info text-dark">${s.rol}</span></td>
+            <td><small>${s.telefono || '-'}<br>${s.email || ''}</small></td>
+            <td><span class="badge ${s.estado ? 'bg-success' : 'bg-secondary'}">${s.estado ? 'Activo' : 'Inactivo'}</span></td>
+            <td class="action-column">
+                <button class="action-btn" style="background-color:#3498db; margin-right:5px;" onclick='openStaffModal(${JSON.stringify(s)})'>✏️</button>
+                <button class="action-btn" onclick="deleteStaff('${s._id}')">🗑️</button>
+            </td>
         </tr>
     `).join('');
 }
 
 async function loadMetrics() {
-    const res = await fetch(`${API_URL}/metrics/top-products`, { headers: { 'Authorization': `Bearer ${token}` } });
-    const data = await res.json();
-    const chartCanvas = document.getElementById('chart-top');
-    if (window.topProductsChart) window.topProductsChart.destroy();
-    window.topProductsChart = new Chart(chartCanvas, {
-        type: 'doughnut',
-        data: { labels: data.map(d => d._id), datasets: [{ data: data.map(d => d.unidades) }] }
+    const startInput = document.getElementById('date-start');
+    const endInput = document.getElementById('date-end');
+    
+    // Fechas por defecto (Mes actual)
+    if (!startInput.value) {
+        const now = new Date();
+        startInput.value = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+        endInput.value = now.toISOString().split('T')[0];
+    }
+
+    const query = `?start=${startInput.value}&end=${endInput.value}`;
+    const headers = { 'Authorization': `Bearer ${token}` };
+
+    // 1. Cargar KPIs (Dashboard General)
+    const resDash = await fetch(`${API_URL}/metrics/dashboard${query}`, { headers });
+    const dashData = await resDash.json();
+    
+    const container = document.getElementById('metrics-container');
+    container.innerHTML = dashData.map(m => `
+        <div class="col-md-3">
+            <div class="metric-card">
+                <div class="item-title text-white-50">${m.producto}</div>
+                <div class="stat-value">${m.unidades} <small class="fs-6 text-muted">unid.</small></div>
+                <div class="stat-label">Hora Pico: ${m.horaPico}</div>
+                <div class="mt-2 badge bg-light text-dark">${m.analisis}</div>
+            </div>
+        </div>
+    `).join('');
+
+    // 2. Cargar Gráficas
+    // Finanzas
+    const resFin = await fetch(`${API_URL}/metrics/financials${query}`, { headers });
+    const finData = await resFin.json();
+    renderChart('financialChart', 'bar', {
+        labels: ['Ingresos', 'Costos', 'Ganancia'],
+        datasets: [{
+            label: 'Total ($)',
+            data: [finData.ingresoTotal, finData.costoTotal, finData.gananciaNeta],
+            backgroundColor: ['#2ecc71', '#e74c3c', '#f1c40f']
+        }]
+    }, { plugins: { title: { display: true, text: 'Finanzas' } } });
+
+    // Categorías
+    const resCat = await fetch(`${API_URL}/metrics/categories${query}`, { headers });
+    const catData = await resCat.json();
+    renderChart('categoryChart', 'doughnut', {
+        labels: catData.map(d => d._id.toUpperCase()),
+        datasets: [{
+            data: catData.map(d => d.cantidadVendida),
+            backgroundColor: ['#e67e22', '#3498db', '#9b59b6', '#1abc9c']
+        }]
+    }, { plugins: { title: { display: true, text: 'Por Categoría' } } });
+
+    // Top Productos
+    const resTop = await fetch(`${API_URL}/metrics/top-products${query}`, { headers });
+    const topData = await resTop.json();
+    renderChart('topProductsChart', 'bar', {
+        labels: topData.map(d => d._id),
+        datasets: [{
+            label: 'Unidades',
+            data: topData.map(d => d.unidades),
+            backgroundColor: '#e91e63'
+        }]
+    }, { indexAxis: 'y', plugins: { title: { display: true, text: 'Top 5 Productos' } } });
+}
+
+function renderChart(id, type, data, options = {}) {
+    const ctx = document.getElementById(id);
+    if (!ctx) return;
+    if (charts[id]) charts[id].destroy();
+    charts[id] = new Chart(ctx, {
+        type: type,
+        data: data,
+        options: { responsive: true, maintainAspectRatio: false, ...options }
     });
 }
 
@@ -219,10 +303,11 @@ function saveProduct() {
         if (data.success) {
             bootstrap.Modal.getInstance(document.getElementById('modal-product')).hide();
             loadMenu();
+            showToast('Producto guardado correctamente', 'success');
         } else {
-            alert('Error al guardar producto');
+            showToast('Error al guardar producto', 'error');
         }
-    });
+    }).catch(() => showToast('Error de conexión', 'error'));
 }
 
 function saveInventory() {
@@ -243,7 +328,8 @@ function saveInventory() {
     }).then(() => {
         bootstrap.Modal.getInstance(document.getElementById('modal-inventory')).hide();
         loadInventory();
-    });
+        showToast('Inventario actualizado', 'success');
+    }).catch(() => showToast('Error al guardar', 'error'));
 }
 
 function saveUser() {
@@ -259,12 +345,39 @@ function saveUser() {
     }).then(() => {
         bootstrap.Modal.getInstance(document.getElementById('modal-user')).hide();
         loadUsers();
-    });
+        showToast('Usuario creado correctamente', 'success');
+    }).catch(() => showToast('Error al crear usuario', 'error'));
 }
 
-function deleteProduct(id) { if (confirm('¿Borrar producto?')) fetch(`${API_URL}/products/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } }).then(loadMenu); }
-function deleteInv(id) { if (confirm('¿Borrar insumo?')) fetch(`${API_URL}/inventory/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } }).then(loadInventory); }
-function deleteUser(id) { if (confirm('¿Borrar usuario?')) fetch(`${API_URL}/users/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } }).then(loadUsers); }
+function saveStaff() {
+    const id = document.getElementById('st-id').value;
+    const data = {
+        nombre: document.getElementById('st-nombre').value,
+        apellido: document.getElementById('st-apellido').value,
+        rol: document.getElementById('st-rol').value,
+        telefono: document.getElementById('st-telefono').value,
+        email: document.getElementById('st-email').value,
+        estado: document.getElementById('st-estado').checked
+    };
+    
+    const method = id ? 'PUT' : 'POST';
+    const url = id ? `${API_URL}/staff/${id}` : `${API_URL}/staff`;
+
+    fetch(url, {
+        method: method,
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify(data)
+    }).then(() => {
+        bootstrap.Modal.getInstance(document.getElementById('modal-staff')).hide();
+        loadStaff();
+        showToast('Personal guardado correctamente', 'success');
+    }).catch(() => showToast('Error al guardar', 'error'));
+}
+
+function deleteProduct(id) { if (confirm('¿Borrar producto?')) fetch(`${API_URL}/products/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } }).then(() => { loadMenu(); showToast('Producto eliminado', 'success'); }); }
+function deleteInv(id) { if (confirm('¿Borrar insumo?')) fetch(`${API_URL}/inventory/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } }).then(() => { loadInventory(); showToast('Insumo eliminado', 'success'); }); }
+function deleteUser(id) { if (confirm('¿Borrar usuario?')) fetch(`${API_URL}/users/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } }).then(() => { loadUsers(); showToast('Usuario eliminado', 'success'); }); }
+function deleteStaff(id) { if (confirm('¿Eliminar miembro del personal?')) fetch(`${API_URL}/staff/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } }).then(() => { loadStaff(); showToast('Personal eliminado', 'success'); }); }
 
 // --- MODALES Y LÓGICA DE RECETAS ---
 
@@ -302,6 +415,17 @@ function openUserModal() {
     document.getElementById('u-pass').value = '';
     document.getElementById('u-role').value = 'cashier';
     new bootstrap.Modal(document.getElementById('modal-user')).show();
+}
+
+function openStaffModal(s = null) {
+    document.getElementById('st-id').value = s?._id || '';
+    document.getElementById('st-nombre').value = s?.nombre || '';
+    document.getElementById('st-apellido').value = s?.apellido || '';
+    document.getElementById('st-rol').value = s?.rol || 'Mesero';
+    document.getElementById('st-telefono').value = s?.telefono || '';
+    document.getElementById('st-email').value = s?.email || '';
+    document.getElementById('st-estado').checked = s ? s.estado : true;
+    new bootstrap.Modal(document.getElementById('modal-staff')).show();
 }
 
 function addRecipeItem() {

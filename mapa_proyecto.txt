@@ -1,7 +1,26 @@
 .
+├── ANALISIS_TECNICO_COMPLETO.md
+├── BUG_FRONTEND_RESUELTO.md
+├── CAMBIOS_APLICADOS.md
+├── CAMBIOS_CSP.md
+├── check-env.sh
+├── COMO_VER_CAMBIOS.md
+├── controllers
+│   └── metrics.controller.js
+├── CORRECCIONES_APLICADAS.md
+├── CSP_PROBLEMA_RESUELTO.md
+├── GIT_GUIA.md
+├── IMPLEMENTACION_FASE1.md
+├── IMPLEMENTACION_FASE2.md
+├── INICIO_RAPIDO.md
+├── mapa_proyecto.txt
+├── MEJORAS_SEGURIDAD.md
+├── MEJORAS_UX_APLICADAS.md
+├── MEJORAS_UX_CLIENTE.md
 ├── middleware
 │   └── auth.js
 ├── models
+│   ├── auth.js
 │   ├── Inventory.js
 │   ├── Merma.js
 │   ├── Pedido.js
@@ -10,30 +29,60 @@
 │   ├── StockManager.js
 │   ├── Supplier.js
 │   └── Usuario.js
+├── OPTIMIZACIONES_FINALES.md
+├── package.json
+├── package-lock.json
+├── PLAN_BUNS_GRILL.md
 ├── public
-│   ├── css
-│   │   └── staff.css
-│   ├── js
-│   │   └── staff.js
 │   ├── admin.html
 │   ├── admin.js
+│   ├── bootstrap.bundle.min.js
+│   ├── bootstrap.min.css
+│   ├── css
+│   │   ├── staff.css
+│   │   └── styles.css
+│   ├── dashboard.html
 │   ├── index.html
+│   ├── js
+│   │   ├── admin.js
+│   │   ├── client.js
+│   │   ├── staff-events.js
+│   │   ├── staff.js
+│   │   └── toast.js
 │   ├── limpiar_db.js
 │   ├── staff.html
-│   └── styles.css
+│   ├── styles.css
+│   └── uploads
+├── push-to-github.sh
 ├── __pycache__
 │   ├── auth.cpython-312.pyc
 │   └── database.cpython-312.pyc
+├── README_BUNS_GRILL.md
+├── README_LOCAL.md
+├── README.md
+├── reiniciar-servidor.sh
+├── repomix-output.xml
 ├── routes
+│   ├── admin-metrics.js
+│   ├── auth.js
 │   ├── inventory.js
 │   ├── metrics.js
 │   ├── metrics.routes.js
 │   ├── products.js
 │   └── users.js
 ├── scripts
+│   ├── create_admin.js
 │   ├── limpiar_db.js
-│   └── seed_inventory.js
+│   ├── seed_buns_grill.js
+│   ├── seed_inventory.js
+│   └── setup_offline.js
+├── SEGURIDAD_URGENTE.md
+├── server.js
+├── server.log
+├── services
+│   └── cron.service.js
 ├── src
+│   ├── app.js
 │   ├── config
 │   │   └── db.js
 │   ├── controllers
@@ -42,18 +91,18 @@
 │   ├── middlewares
 │   │   └── auth.middleware.js
 │   ├── models
+│   │   └── StockManager.js
 │   ├── routes
 │   │   ├── inventory.routes.js
 │   │   └── metrics.routes.js
 │   ├── services
 │   │   ├── metrics.service.js
 │   │   └── socket.service.js
-│   ├── utils
-│   └── app.js
-├── mapa_proyecto.txt
-├── package.json
-├── package-lock.json
-├── repomix-output.xml
-└── server.js
+│   └── utils
+├── SUBIR_A_GITHUB.md
+├── TESTING_CHECKLIST.md
+├── VERIFICACION_FASE1.md
+├── verificar-fase1.sh
+└── verificar-seguridad.sh
 
-17 directories, 40 files
+20 directories, 86 files

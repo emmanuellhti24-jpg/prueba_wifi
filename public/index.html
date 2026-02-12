@@ -11,7 +11,6 @@
     <link rel="stylesheet" href="styles.css">
     
     <style>
-        body { background: #F9F7F2; }
         .step-container {
             min-height: 100vh;
             display: flex;
@@ -45,118 +44,6 @@
         .wizard-step.active { background: #D35400; color: white; transform: scale(1.2); }
         .wizard-step.completed { background: #27AE60; color: white; }
         
-        /* Carrito Flotante */
-        .cart-float {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            background: #D35400;
-            color: white;
-            width: 60px;
-            height: 60px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            box-shadow: 0 4px 15px rgba(211,84,0,0.4);
-            z-index: 1000;
-            transition: transform 0.3s;
-        }
-        .cart-float:hover { transform: scale(1.1); }
-        .cart-badge {
-            position: absolute;
-            top: -5px;
-            right: -5px;
-            background: #E74C3C;
-            color: white;
-            border-radius: 50%;
-            width: 25px;
-            height: 25px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 12px;
-            font-weight: bold;
-        }
-        
-        /* Productos */
-        .product-card {
-            background: white;
-            border-radius: 15px;
-            overflow: hidden;
-            transition: all 0.3s;
-            cursor: pointer;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        .product-card:hover { transform: translateY(-5px); box-shadow: 0 5px 20px rgba(211,84,0,0.3); }
-        .product-img {
-            width: 100%;
-            height: 180px;
-            object-fit: cover;
-        }
-        .product-info {
-            padding: 15px;
-        }
-        .product-name {
-            font-weight: bold;
-            font-size: 1.1rem;
-            color: #2C3E50;
-            margin-bottom: 5px;
-        }
-        .product-price {
-            color: #D35400;
-            font-size: 1.3rem;
-            font-weight: bold;
-        }
-        .btn-add {
-            background: #D35400;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 25px;
-            width: 100%;
-            margin-top: 10px;
-            font-weight: bold;
-            transition: all 0.3s;
-        }
-        .btn-add:hover { background: #E67E22; transform: scale(1.05); }
-        
-        /* Carrito Modal */
-        .cart-item {
-            display: flex;
-            align-items: center;
-            padding: 15px;
-            border-bottom: 1px solid #eee;
-        }
-        .cart-item-img {
-            width: 60px;
-            height: 60px;
-            object-fit: cover;
-            border-radius: 10px;
-            margin-right: 15px;
-        }
-        .cart-item-info { flex: 1; }
-        .cart-qty-controls {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        .qty-btn {
-            width: 30px;
-            height: 30px;
-            border-radius: 50%;
-            border: 2px solid #D35400;
-            background: white;
-            color: #D35400;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            font-weight: bold;
-        }
-        .qty-btn:hover { background: #D35400; color: white; }
-        
         /* Animaciones */
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
@@ -169,7 +56,7 @@
         .order-id-display { font-size: 5rem; font-weight: 900; text-shadow: 4px 4px 0px rgba(0,0,0,0.3); line-height: 1; }
     </style>
 </head>
-<body>
+<body class="fondo">
     <!-- Wizard Progress -->
     <div class="wizard-progress" id="wizard-progress" style="display: none; position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 999;">
         <div class="wizard-step" data-step="1">1</div>
@@ -222,30 +109,12 @@
     </div>
 
     <!-- PASO 3: MENÚ -->
-    <div id="step-3" class="hidden container-fluid py-4" style="padding-bottom: 100px;">
-        <div class="d-flex justify-content-between align-items-center mb-4 px-3">
-            <div>
-                <h2 class="client-title m-0" style="font-size: 2rem;">MENÚ</h2>
-                <div class="text-white-50 small" id="order-info">Cliente - Servicio</div>
-            </div>
-            <button class="btn btn-outline-light rounded-pill px-3" onclick="location.reload()">Cancelar</button>
-        </div>
-
-        <div id="menu-grid" class="row g-3 px-2">
+    <div id="step-3" class="hidden container-fluid py-4">
+        <div id="menu-grid" class="flex justify-content-between align-items-center p-4">
             <div class="col-12 text-center text-white py-5">
                 <div class="spinner-border text-warning" role="status"></div>
                 <p class="mt-3">Cargando menú...</p>
             </div>
-        </div>
-
-        <div class="fixed-bottom p-3 bg-dark border-top border-secondary shadow-lg d-flex justify-content-between align-items-center" style="z-index: 1000;">
-            <div>
-                <small class="text-muted d-block">Total a pagar:</small>
-                <h2 class="text-warning m-0 fw-bold">$<span id="total-display">0</span></h2>
-            </div>
-            <button class="btn-primary-client" style="width: auto; padding: 12px 40px; font-size: 1.2rem;" onclick="window.enviarPedido()">
-                PEDIR <i class="fas fa-check-circle ms-2"></i>
-            </button>
         </div>
     </div>
 
@@ -307,7 +176,7 @@
                     <h5 class="modal-title"><i class="fas fa-shopping-cart me-2"></i>Tu Carrito</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
-                <div class="modal-body" id="cart-items-container" style="max-height: 400px; overflow-y: auto;">
+                <div class="modal-body" id="modal-cart-items" style="max-height: 400px; overflow-y: auto;">
                     <div class="text-center text-muted py-5" id="empty-cart">
                         <i class="fas fa-shopping-cart fa-3x mb-3 opacity-50"></i>
                         <p>Tu carrito está vacío</p>
@@ -365,6 +234,23 @@
 
         // --- FUNCIONES GLOBALES (WINDOW) ---
 
+        window.cancelarPedido = function() {
+            if (!confirm('¿Estás seguro de cancelar el pedido? Se perderán los productos seleccionados.')) return;
+
+            // 1. Cerrar cualquier modal abierto
+            document.querySelectorAll('.modal.show').forEach(el => {
+                const modal = bootstrap.Modal.getInstance(el);
+                if (modal) modal.hide();
+            });
+
+            // 2. Limpiar carrito
+            currentOrder.items = [];
+            updateCart(); // Actualiza UI (badge y total)
+
+            // 3. Redirigir al inicio (Paso 2 si hay nombre, sino Paso 1)
+            window.goToStep(localStorage.getItem('customerName') ? 2 : 1);
+        };
+
         window.goToStep = function(step) {
             console.log("Navegando al paso:", step);
             currentStep = step;
@@ -379,6 +265,7 @@
                     return;
                 }
                 currentOrder.cliente = name;
+                localStorage.setItem('customerName', name);
                 document.getElementById('display-name').innerText = name.toUpperCase();
             }
             
@@ -413,7 +300,8 @@
         window.setService = function(type) {
             console.log("Servicio seleccionado:", type);
             currentOrder.tipo = type;
-            document.getElementById('order-info').innerText = `${currentOrder.cliente} • ${type}`;
+            const infoEl = document.getElementById('order-info');
+            if(infoEl) infoEl.innerText = `${currentOrder.cliente} • ${type}`;
             window.goToStep(3);
         };
 
@@ -451,6 +339,7 @@
 
             new bootstrap.Modal(document.getElementById('productModal')).show();
         };
+        window.addProduct = window.openModal; // Alias para compatibilidad
 
         window.adjustQty = function(d) {
             tempItem.qty = Math.max(1, tempItem.qty + d);
@@ -468,6 +357,7 @@
             });
 
             currentOrder.items.push(tempItem);
+            saveCartToStorage(); // Guardar cambios
             updateCart();
             
             const modalEl = document.getElementById('productModal');
@@ -476,7 +366,7 @@
         };
 
         window.openCartModal = function() {
-            renderCart();
+            renderizarCarrito();
             new bootstrap.Modal(document.getElementById('cartModal')).show();
         };
 
@@ -486,15 +376,17 @@
                 if(currentOrder.items[index].qty <= 0) {
                     currentOrder.items.splice(index, 1);
                 }
+                saveCartToStorage(); // Guardar cambios
                 updateCart();
-                renderCart();
+                renderizarCarrito();
             }
         };
 
         window.removeFromCart = function(index) {
             currentOrder.items.splice(index, 1);
+            saveCartToStorage(); // Guardar cambios
             updateCart();
-            renderCart();
+            renderizarCarrito();
         };
 
         window.confirmOrder = function() {
@@ -532,47 +424,68 @@
             }
             
             currentOrder.total = total;
-            document.getElementById('total-display').innerText = total;
+            // document.getElementById('total-display').innerText = total;
             document.getElementById('cart-count').innerText = currentOrder.items.reduce((sum, i) => sum + i.qty, 0);
         }
 
-        function renderCart() {
-            const container = document.getElementById('cart-items-container');
-            const emptyCart = document.getElementById('empty-cart');
+        function renderizarCarrito() {
+            const container = document.getElementById('modal-cart-items');
             
             if(currentOrder.items.length === 0) {
-                emptyCart.style.display = 'block';
-                container.querySelectorAll('.cart-item').forEach(el => el.remove());
+                container.innerHTML = `
+                    <div class="text-center text-muted py-5" id="empty-cart">
+                        <i class="fas fa-shopping-cart fa-3x mb-3 opacity-50"></i>
+                        <p>Tu carrito está vacío</p>
+                    </div>`;
                 document.getElementById('cart-total').innerText = '0';
                 return;
             }
             
-            emptyCart.style.display = 'none';
             container.innerHTML = '';
             
             currentOrder.items.forEach((item, idx) => {
                 const itemEl = document.createElement('div');
-                itemEl.className = 'cart-item';
+                itemEl.className = 'cart-item-modern';
                 itemEl.innerHTML = `
                     <img src="${item.imagen || 'https://via.placeholder.com/60'}" class="cart-item-img">
                     <div class="cart-item-info">
                         <div class="fw-bold">${item.nombre}</div>
-                        <div class="text-muted small">$${item.precioUnitario + item.extraPrice}</div>
+                        <div class="text-muted small">$${(item.precioUnitario + item.extraPrice).toFixed(2)}</div>
                         ${item.mods && item.mods.length ? `<div class="text-danger small">${item.mods.join(', ')}</div>` : ''}
                     </div>
-                    <div class="cart-qty-controls">
-                        <div class="qty-btn" onclick="window.updateCartQty(${idx}, -1)">-</div>
-                        <span class="fw-bold">${item.qty}</span>
-                        <div class="qty-btn" onclick="window.updateCartQty(${idx}, 1)">+</div>
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="qty-selector">
+                            <button class="qty-btn-modern" onclick="window.updateCartQty(${idx}, -1)"><i class="fas fa-minus small"></i></button>
+                            <span class="fw-bold mx-2" style="min-width:20px; text-align:center">${item.qty}</span>
+                            <button class="qty-btn-modern" onclick="window.updateCartQty(${idx}, 1)"><i class="fas fa-plus small"></i></button>
+                        </div>
+                        <button class="btn btn-link text-danger p-0 ms-1" onclick="window.removeFromCart(${idx})">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
                     </div>
-                    <button class="btn btn-sm btn-outline-danger ms-2" onclick="window.removeFromCart(${idx})">
-                        <i class="fas fa-trash"></i>
-                    </button>
                 `;
                 container.appendChild(itemEl);
             });
             
             document.getElementById('cart-total').innerText = currentOrder.total;
+        }
+
+        // --- PERSISTENCIA (LOCALSTORAGE) ---
+        function saveCartToStorage() {
+            localStorage.setItem('momoy_cart', JSON.stringify(currentOrder.items));
+        }
+
+        function loadCartFromStorage() {
+            const saved = localStorage.getItem('momoy_cart');
+            if (saved) {
+                try {
+                    currentOrder.items = JSON.parse(saved);
+                    updateCart();
+                } catch (e) {
+                    console.error("Error cargando carrito", e);
+                    localStorage.removeItem('momoy_cart');
+                }
+            }
         }
 
         window.enviarPedido = async function() {
@@ -592,6 +505,11 @@
                         
                         updateStatusUI('PENDING_PAYMENT');
                         
+                        // Limpiar carrito al enviar
+                        currentOrder.items = [];
+                        saveCartToStorage();
+                        updateCart();
+
                         document.querySelectorAll('.step-container, #step-3').forEach(el => el.classList.add('hidden'));
                         document.getElementById('step-status').classList.remove('hidden');
                     } else {
@@ -645,21 +563,33 @@
                 const pString = JSON.stringify(p).replace(/"/g, '&quot;');
                 return `
                 <div class="col-12 col-md-6 col-lg-4">
-                    <div class="product-card" onclick="window.openModal(${pString})">
-                        ${p.imagen ? 
-                            `<img src="${p.imagen}" class="product-img">` : 
-                            `<div class="product-img" style="background: linear-gradient(135deg, #D35400 0%, #E67E22 100%);"></div>`
-                        }
-                        <div class="product-info">
-                            <div class="product-name">${p.nombre}</div>
-                            <div class="product-price">${getDisplayPrice(p)}</div>
-                            <button class="btn-add" onclick="event.stopPropagation(); window.openModal(${pString})">
-                                <i class="fas fa-plus me-2"></i>Agregar
+                    <div class="product-card-modern" onclick="window.openModal(${pString})">
+                        <div class="product-img-container">
+                            ${p.imagen ? 
+                                `<img src="${p.imagen}" class="product-img-modern" alt="${p.nombre}">` : 
+                                `<div class="product-img-modern" style="background: linear-gradient(135deg, #D35400 0%, #E67E22 100%);"></div>`
+                            }
+                        </div>
+                        <div class="product-body">
+                            <div>
+                                <div class="product-title">${p.nombre}</div>
+                                <div class="product-price-tag">${getDisplayPrice(p)}</div>
+                            </div>
+                            <button class="btn-add-modern" onclick="event.stopPropagation(); window.addProduct(${pString})">
+                                AGREGAR <i class="fas fa-plus-circle ms-1"></i>
                             </button>
                         </div>
                     </div>
                 </div>
             `}).join('');
+            
+            // Agregar Título y Botones al contenedor
+            container.innerHTML = `<h2 class="w-100 text-center text-white mb-4">MENÚ</h2>` + container.innerHTML + `
+                <div class="w-100 d-flex justify-content-center flex-wrap gap-3 mt-4">
+                    <button id="pedir-btn" onclick="window.enviarPedido()">PEDIR</button>
+                    <button id="cancel-btn" onclick="window.cancelarPedido()">Cancelar</button>
+                </div>
+            `;
         }
 
         function getDisplayPrice(p) {
@@ -706,6 +636,17 @@
 
         // --- INICIO ---
         document.addEventListener('DOMContentLoaded', () => {
+            // Recuperar nombre del cliente
+            const savedName = localStorage.getItem('customerName');
+            if (savedName) {
+                const nameInput = document.getElementById('client-name');
+                if (nameInput) nameInput.value = savedName;
+                window.goToStep(2);
+            }
+
+            // Cargar carrito guardado
+            loadCartFromStorage();
+
             // Cargar menú
             fetch('/api/products')
                 .then(res => res.json())
