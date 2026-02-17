@@ -85,6 +85,7 @@ function renderMenu() {
 
 function agregarAlCarrito(id) {
     const prod = inventario.find(p => p._id === id);
+    if (!prod) return; //Producto no existente
     const existente = carrito.find(c => c._id === id);
 
     if (existente) {
@@ -96,6 +97,7 @@ function agregarAlCarrito(id) {
     guardarCarrito();
     // Feedback visual vibrante (opcional)
     if(navigator.vibrate) navigator.vibrate(50);
+        actualizarContador()
 }
 
 function guardarCarrito() {
@@ -108,6 +110,9 @@ function actualizarBadge() {
     document.getElementById('cart-count').innerText = total;
 }
 
+    function actualizarContador() {
+        document.getElementById('cart-count').innerText = currentOrder.items.reduce((sum, i) => sum + i.qty, 0);
+    }
 // --- MODAL CARRITO ---
 const modalCarrito = new bootstrap.Modal(document.getElementById('modalCarrito'));
 
@@ -116,6 +121,7 @@ function abrirCarrito() {
     let total = 0;
     container.innerHTML = '';
 
+    // <div class="text-center text-muted py-5" id="empty-cart">
     if(carrito.length === 0) {
         container.innerHTML = '<p class="text-center text-muted">Tu carrito está vacío ☹️</p>';
     } else {

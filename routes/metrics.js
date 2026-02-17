@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const StockManager = require('../models/StockManager');
 const Sale = require('../models/Sale'); // Nuevo modelo de ventas
-const { verificarToken, permitirRoles } = require('../src/middlewares/auth.middleware');
+const { verificarToken, permitirRoles } = require('../middleware/auth');
 
 // Endpoint existente (Dashboard General)
 router.get('/dashboard', verificarToken, permitirRoles('admin'), async (req, res) => {

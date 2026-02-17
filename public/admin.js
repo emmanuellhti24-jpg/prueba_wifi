@@ -70,11 +70,16 @@ function switchTab(tabName) {
 // --- CARGA DE DATOS (LOADERS) ---
 
 async function loadOrders() {
-    const res = await fetch(`${API_URL}/pedidos`, { headers: { 'Authorization': `Bearer ${token}` } });
-    if (!res.ok) return;
-    const orders = await res.json();
-    const container = document.getElementById('orders-grid');
-    container.innerHTML = orders.length ? orders.map(renderOrderCard).join('') : '<p class="text-center text-muted">No hay pedidos activos.</p>';
+    try {
+        const res = await fetch(`${API_URL}/pedidos`, { headers: { 'Authorization': `Bearer ${token}` } });
+        if (res.status === 401) return logout();
+        if (!res.ok) return;
+        const orders = await res.json();
+        const container = document.getElementById('orders-grid');
+        if (container) container.innerHTML = orders.length ? orders.map(renderOrderCard).join('') : '<p class="text-center text-muted">No hay pedidos activos.</p>';
+    } catch (error) {
+        console.error("Error cargando pedidos:", error);
+    }
 }
 
 async function loadMenu() {
@@ -91,6 +96,7 @@ async function loadMenu() {
             <td><span class="badge bg-primary">${p.categoria}</span></td>
             <td>${p.precios?.['1'] ? `1:$${p.precios['1']} | 2:$${p.precios['2']}` : `$${p.precioUnitario}`}</td>
             <td class="action-column">
+                <button class="action-btn" onclick='editProduct(${JSON.stringify(p)})'>✏️</button>
                 <button class="action-btn" onclick="deleteProduct('${p.id}')">🗑️</button>
             </td>
         </tr>
@@ -264,18 +270,24 @@ function getActionButtons(o) {
 
 // --- ACCIONES (POST, PUT, DELETE) ---
 
-function setStatus(id, status) {
-    fetch(`${API_URL}/pedido/${id}/status`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ status })
-    }).then(loadOrders);
+async function setStatus(id, status) {
+    try {
+        await fetch(`${API_URL}/pedido/${id}/status`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({ status })
+        });
+        loadOrders();
+    } catch (error) {
+        console.error("Error actualizando estado:", error);
+    }
 }
 
 function saveProduct() {
     const formData = new FormData();
-    const id = document.getElementById('p-id').value || 'prod_' + Date.now();
-    formData.append('id', id);
+    const id = document.getElementById('p-id').value;
+    const isUpdating = !!id;
+    formData.append('id', id || 'prod_' + Date.now());
     formData.append('nombre', document.getElementById('p-name').value);
     formData.append('categoria', document.getElementById('p-cat').value);
     formData.append('precioUnitario', document.getElementById('p-unit').value);
@@ -295,9 +307,12 @@ function saveProduct() {
     if (fileInput.files[0]) formData.append('imagen', fileInput.files[0]);
     formData.append('imagenActual', document.getElementById('p-img-current').value);
 
-    fetch(`${API_URL}/products`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` },
+    const method = isUpdating ? 'PUT' : 'POST';
+    const url = isUpdating ? `${API_URL}/products/${id}` : `${API_URL}/products`;
+
+    fetch(url, {
+        method: method,
+        headers: { 'Authorization': `Bearer ${token}` }, // Multer se encarga del Content-Type
         body: formData
     }).then(res => res.json()).then(data => {
         if (data.success) {
@@ -305,7 +320,7 @@ function saveProduct() {
             loadMenu();
             showToast('Producto guardado correctamente', 'success');
         } else {
-            showToast('Error al guardar producto', 'error');
+            showToast(data.error || 'Error al guardar producto', 'error');
         }
     }).catch(() => showToast('Error de conexión', 'error'));
 }
@@ -441,8 +456,19 @@ function renderRecipeList() {
     const list = document.getElementById('recipe-list');
     list.innerHTML = currentRecipe.map((r, i) => {
         const name = inventoryList.find(x => x._id === (r.insumo._id || r.insumo))?.nombre || 'Insumo no encontrado';
-        return `<li class="list-group-item d-flex justify-content-between align-items-center p-1"><span>${name} x ${r.cantidad}</span><button class="btn btn-sm btn-outline-danger py-0 px-1" onclick="currentRecipe.splice(${i},1); renderRecipeList()"><i class="fas fa-times"></i></button></li>`;
+        return `
+          <li class="list-group-item" onclick="setActiveItem(this)">
+            <span><i class="fas fa-caret-right me-2"></i>${name} <strong class="ms-1">x ${r.cantidad}</strong></span>
+            <button class="btn btn-sm btn-outline-danger py-0 px-2 rounded-circle" onclick="event.stopPropagation(); currentRecipe.splice(${i},1); renderRecipeList()">
+              <i class="fas fa-times"></i>
+            </button>
+          </li>`;
     }).join('');
+}
+
+function setActiveItem(el) {
+    document.querySelectorAll('#recipe-list .list-group-item').forEach(item => item.classList.remove('active'));
+    el.classList.add('active');
 }
 
 function editProduct(p) { openProductModal(p); }
@@ -450,4 +476,24 @@ function editProduct(p) { openProductModal(p); }
 function logout() {
     localStorage.clear();
     window.location.href = '/';
+}
+
+// --- UTILIDADES ---
+function showToast(message, type = 'info') {
+    let container = document.getElementById('toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        container.className = 'toast-container position-fixed bottom-0 end-0 p-3';
+        container.style.zIndex = '1100';
+        document.body.appendChild(container);
+    }
+
+    const toast = document.createElement('div');
+    toast.className = `toast align-items-center text-white bg-${type === 'error' ? 'danger' : 'success'} border-0 show`;
+    toast.innerHTML = `
+        <div class="d-flex"><div class="toast-body">${message}</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div>
+    `;
+    container.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
 }

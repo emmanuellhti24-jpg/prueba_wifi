@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Usuario = require('../models/Usuario');
 const bcrypt = require('bcryptjs');
-const { isAdmin, verificarToken } = require('../src/middlewares/auth.middleware');
+const { isAdmin, verificarToken } = require('../middleware/auth.js');
 
 router.use(verificarToken);
 router.use(isAdmin);
@@ -25,6 +25,19 @@ router.post('/', async (req, res, next) => {
     const nuevoUsuario = new Usuario({ username, password: hash, role });
     await nuevoUsuario.save();
     res.json({ success: true, message: 'Usuario creado' });
+  } catch (error) { next(error); }
+});
+
+// PUT: Cambiar rol de usuario
+router.put('/:id/role', async (req, res, next) => {
+  try {
+    const { role } = req.body;
+    if (!role) return res.status(400).json({ message: 'Falta el rol' });
+
+    const user = await Usuario.findByIdAndUpdate(req.params.id, { role }, { new: true });
+    if (!user) return res.status(404).json({ message: 'Usuario no encontrado' });
+
+    res.json({ success: true, message: 'Rol actualizado' });
   } catch (error) { next(error); }
 });
 

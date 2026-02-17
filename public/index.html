@@ -71,6 +71,14 @@
         <div class="cart-badge" id="cart-count">0</div>
     </div>
 
+
+<!-- Botón flotante carrito -->
+<button id="btnCarrito" class="carrito-float" onclick="abrirCarrito()">
+    <i class="fas fa-shopping-cart"></i> 
+    <span id="contadorCarrito">0</span>
+</button>
+
+
     <!-- PASO 1: NOMBRE -->
     <div id="step-1" class="step-container">
         <div class="mb-4">
@@ -300,6 +308,7 @@
         window.setService = function(type) {
             console.log("Servicio seleccionado:", type);
             currentOrder.tipo = type;
+            localStorage.setItem('serviceType', type); // Guardar para persistencia
             const infoEl = document.getElementById('order-info');
             if(infoEl) infoEl.innerText = `${currentOrder.cliente} • ${type}`;
             window.goToStep(3);
@@ -363,6 +372,10 @@
             const modalEl = document.getElementById('productModal');
             const modal = bootstrap.Modal.getInstance(modalEl);
             if(modal) modal.hide();
+            
+            // Actualizar UI y animar
+            actualizarContador();
+            animarCarrito();
         };
 
         window.openCartModal = function() {
@@ -472,18 +485,18 @@
 
         // --- PERSISTENCIA (LOCALSTORAGE) ---
         function saveCartToStorage() {
-            localStorage.setItem('momoy_cart', JSON.stringify(currentOrder.items));
+            localStorage.setItem('carrito', JSON.stringify(currentOrder.items));
         }
 
         function loadCartFromStorage() {
-            const saved = localStorage.getItem('momoy_cart');
+            const saved = localStorage.getItem('carrito');
             if (saved) {
                 try {
                     currentOrder.items = JSON.parse(saved);
                     updateCart();
                 } catch (e) {
                     console.error("Error cargando carrito", e);
-                    localStorage.removeItem('momoy_cart');
+                    localStorage.removeItem('carrito');
                 }
             }
         }
@@ -582,11 +595,30 @@
                     </div>
                 </div>
             `}).join('');
+
+            function agregarAlCarrito(id) {
+                //  Find index  existing product in the cart
+                const productIndex = carrito.findIndex(item => item.productoId === id);
+                if (productIndex !== -1) {
+                    // Product exists
+                    carrito[productIndex].cantidad++;
+                } else {
+                    // New product
+                    const product = menuData.find(item => item.id === id);
+                    if (!product) return console.warn("Producto no encontrado en menú");
+                    carrito.push({ ...product, cantidad: 1 });
+                }
+                // Actualiza UI
+                updateCartUI();
+                // Actualiza Local Storage
+                saveCart();
+            }
+            
             
             // Agregar Título y Botones al contenedor
             container.innerHTML = `<h2 class="w-100 text-center text-white mb-4">MENÚ</h2>` + container.innerHTML + `
                 <div class="w-100 d-flex justify-content-center flex-wrap gap-3 mt-4">
-                    <button id="pedir-btn" onclick="window.enviarPedido()">PEDIR</button>
+                    <button id="pedir-btn" onclick="irAlCarrito()">PEDIR</button>
                     <button id="cancel-btn" onclick="window.cancelarPedido()">Cancelar</button>
                 </div>
             `;
@@ -599,49 +631,113 @@
             return `$${p.precioUnitario}`;
         }
 
-        function updateStatusUI(status) {
+        function updateStatusUI(status, pedidoData = null) {
             const txt = document.getElementById('track-status-text');
             const msg = document.getElementById('track-msg');
             const bar = document.getElementById('status-bar');
             
             txt.className = 'status-display';
 
-            if (status === 'PENDING_PAYMENT') {
-                txt.innerText = "ENVIADO"; txt.classList.add('status-IN_KITCHEN');
-                msg.innerText = "¡Listo! Pasa a pagar a caja.";
-                bar.style.width = "25%"; bar.className = "progress-bar bg-warning";
+            // Mapeo de estados a información visual
+            const estadosInfo = {
+                'PENDING_PAYMENT': {
+                    texto: '💰 RECIBIDO',
+                    mensaje: '¡Pedido recibido! Pasa a pagar a caja para continuar.',
+                    progreso: 20,
+                    clase: 'status-IN_KITCHEN',
+                    colorBarra: 'bg-warning'
+                },
+                'IN_KITCHEN': {
+                    texto: '🍳 EN COCINA',
+                    mensaje: 'Tu pedido ha sido pagado y enviado a cocina.',
+                    progreso: 40,
+                    clase: 'status-PREPARING',
+                    colorBarra: 'bg-info'
+                },
+                'PREPARING': {
+                    texto: '👨‍🍳 PREPARANDO',
+                    mensaje: 'Estamos preparando tus alimentos con mucho cuidado...',
+                    progreso: 70,
+                    clase: 'status-PREPARING',
+                    colorBarra: 'bg-primary'
+                },
+                'READY': {
+                    texto: '✅ LISTO',
+                    mensaje: '¡Tu pedido está listo! Pasa a recogerlo.',
+                    progreso: 95,
+                    clase: 'status-READY',
+                    colorBarra: 'bg-success',
+                    sonido: true
+                },
+                'COMPLETED': {
+                    texto: '📦 ENTREGADO',
+                    mensaje: '¡Gracias por tu compra! Esperamos verte pronto.',
+                    progreso: 100,
+                    clase: 'status-READY',
+                    colorBarra: 'bg-success',
+                    recargar: true
+                }
+            };
+
+            const info = estadosInfo[status] || estadosInfo['PENDING_PAYMENT'];
+            
+            // Actualizar UI
+            txt.innerText = info.texto;
+            txt.classList.add(info.clase);
+            msg.innerText = info.mensaje;
+            bar.style.width = info.progreso + '%';
+            bar.className = 'progress-bar ' + info.colorBarra;
+
+            // Reproducir sonido si está listo
+            if (info.sonido) {
+                try { 
+                    new Audio('https://actions.google.com/sounds/v1/cartoon/pop.ogg').play().catch(e=>{}); 
+                } catch(e){}
             }
-            else if (status === 'IN_KITCHEN') {
-                txt.innerText = "EN COLA"; txt.classList.add('status-PREPARING');
-                msg.innerText = "Tu orden ha sido enviada a cocina.";
-                bar.style.width = "50%"; bar.className = "progress-bar bg-info";
+
+            // Recargar página si está completado
+            if (info.recargar) {
+                setTimeout(() => {
+                    localStorage.removeItem('lastOrderId');
+                    location.reload();
+                }, 5000);
             }
-            else if (status === 'PREPARING') {
-                txt.innerText = "COCINANDO 🔥"; txt.classList.add('status-PREPARING');
-                msg.innerText = "Preparando tus alimentos...";
-                bar.style.width = "75%"; bar.className = "progress-bar bg-primary";
-            }
-            else if (status === 'READY') {
-                txt.innerText = "¡LISTO! ✅"; txt.classList.add('status-READY');
-                msg.innerText = "Pasa a recoger tu pedido.";
-                bar.style.width = "100%"; bar.className = "progress-bar bg-success";
-                try { new Audio('https://actions.google.com/sounds/v1/cartoon/pop.ogg').play().catch(e=>{}); } catch(e){}
-            }
-            else if (status === 'COMPLETED') {
-                txt.innerText = "ENTREGADO ❤️";
-                msg.innerText = "¡Gracias por tu compra!";
-                setTimeout(() => location.reload(), 5000);
-            }
+
+            // Log para debugging
+            console.log(`📊 Estado actualizado: ${status} (${info.texto})`);
         }
 
         // --- INICIO ---
         document.addEventListener('DOMContentLoaded', () => {
+            // Verificar si venimos de confirmar pedido
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('track') === 'true') {
+                const lastId = localStorage.getItem('lastOrderId');
+                if (lastId) {
+                    myOrderId = parseInt(lastId);
+                    document.getElementById('track-order-id').innerText = `#${myOrderId}`;
+                    updateStatusUI('PENDING_PAYMENT');
+                    window.goToStep(4); // Ir directo a status
+                    return;
+                }
+            }
+
             // Recuperar nombre del cliente
             const savedName = localStorage.getItem('customerName');
+            const savedService = localStorage.getItem('serviceType');
+            
             if (savedName) {
                 const nameInput = document.getElementById('client-name');
                 if (nameInput) nameInput.value = savedName;
                 window.goToStep(2);
+                
+                // Si ya hay servicio seleccionado, ir al menú
+                if (savedService) {
+                    currentOrder.tipo = savedService;
+                    const infoEl = document.getElementById('order-info');
+                    if(infoEl) infoEl.innerText = `${savedName} • ${savedService}`;
+                    window.goToStep(3);
+                }
             }
 
             // Cargar carrito guardado
@@ -660,16 +756,56 @@
                     document.getElementById('menu-grid').innerHTML = '<div class="col-12 text-center text-white">Error conectando con servidor.</div>';
                 });
 
-            // Listeners de Socket
+            // Listeners de Socket - Actualizaciones en tiempo real
             if(socket) {
                 socket.on('actualizacion-pedido', (pedido) => {
                     if (myOrderId && pedido.numeroOrden === myOrderId) {
-                        updateStatusUI(pedido.status);
+                        console.log('🔔 Actualización recibida:', pedido);
+                        updateStatusUI(pedido.status, pedido);
+                        
+                        // Mostrar notificación visual si el navegador lo soporta
+                        if ('Notification' in window && Notification.permission === 'granted') {
+                            const estadosLegibles = {
+                                'PENDING_PAYMENT': 'Recibido',
+                                'IN_KITCHEN': 'En Cocina',
+                                'PREPARING': 'Preparando',
+                                'READY': 'Listo',
+                                'COMPLETED': 'Entregado'
+                            };
+                            
+                            new Notification('Momoy\'s Burger', {
+                                body: `Tu pedido #${myOrderId} está ${estadosLegibles[pedido.status]}`,
+                                icon: '/favicon.ico'
+                            });
+                        }
                     }
                 });
+                
+                // Solicitar permisos de notificación al cargar
+                if ('Notification' in window && Notification.permission === 'default') {
+                    Notification.requestPermission();
+                }
             }
         });
-
     </script>
+
+<!-- PANEL LATERAL -->
+<div id="carritoPanel" class="carrito-panel">
+  <div class="carrito-header">
+    <h3>🛒 Tu Pedido</h3>
+    <button onclick="cerrarCarrito()">✖</button>
+  </div>
+
+  <div id="carritoContenido" class="carrito-contenido"></div>
+
+  <div class="carrito-footer">
+    <h4>Total: $<span id="totalCarrito">0</span></h4>
+    <button onclick="confirmarPedido()" class="btn-confirmar">
+      Confirmar Pedido
+    </button>
+  </div>
+</div>
+
+<script src="carrito.js"></script>
 </body>
 </html>

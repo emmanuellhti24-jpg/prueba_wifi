@@ -9,9 +9,10 @@ const { Server } = require('socket.io');
 const morgan = require('morgan');
 
 // Importaciones locales
-const connectDB = require('./src/config/db');
+const connectDB = require('./config/db');
 const { verificarToken, permitirRoles } = require('./middleware/auth.js');
 const { initCronJobs } = require('./services/cron.service');
+const WorkflowService = require('./services/workflow.service');
 
 // Modelos y Lógica de Negocio
 const Pedido = require('./models/Pedido');
@@ -56,6 +57,7 @@ app.use('/api/inventory', require('./routes/inventory.js'));
 app.use('/api/metrics', require('./routes/metrics.js'));
 app.use('/api/admin/metrics', require('./routes/admin-metrics.js')); // Métricas avanzadas
 app.use('/api/users', require('./routes/users.js'));
+app.use('/api/promotions', require('./routes/promotions.js')); // Sistema de promociones 3x2
 
 // --- 4. RUTAS ESPECIALES (Lógica de negocio principal) ---
 app.post('/api/pedido', async (req, res) => {
@@ -95,10 +97,38 @@ app.post('/api/pedido/:id/status', verificarToken, async (req, res) => {
   try {
     const { status } = req.body;
     const pedido = await Pedido.findById(req.params.id);
-    if (!pedido) return res.status(404).json({ error: 'Pedido no encontrado' });
+    
+    if (!pedido) {
+      return res.status(404).json({ error: 'Pedido no encontrado' });
+    }
 
     const estadoAnterior = pedido.status;
+    const rol = req.user.role;
+
+    // Validar transición de estado con el workflow service
+    const validacion = WorkflowService.validarTransicion(estadoAnterior, status, rol);
+    
+    if (!validacion.valido) {
+      return res.status(403).json({ 
+        error: 'Transición no permitida',
+        detalle: validacion.mensaje,
+        estadoActual: estadoAnterior,
+        estadoSolicitado: status
+      });
+    }
+
+    // Actualizar estado
     pedido.status = status;
+    
+    // Agregar entrada al historial de cambios
+    if (!pedido.history) pedido.history = [];
+    pedido.history.push({
+      status: status,
+      timestamp: new Date(),
+      user: req.user.username || req.user.id,
+      role: rol
+    });
+
     await pedido.save();
 
     // Lógica de negocio al cambiar de estado
@@ -115,14 +145,29 @@ app.post('/api/pedido/:id/status', verificarToken, async (req, res) => {
     if (status === 'COMPLETED' && estadoAnterior !== 'COMPLETED') {
       try {
         await StockManager.registrarVenta(pedido, req.user);
+        console.log(`✅ Pedido #${pedido.numeroOrden} completado y registrado.`);
       } catch (ventaError) {
         console.error('Error registrando venta:', ventaError);
         // Continuar aunque falle el registro de venta
       }
     }
 
-    io.emit('actualizacion-pedido', pedido);
-    res.json({ success: true });
+    // Emitir actualización en tiempo real a todos los clientes
+    io.emit('actualizacion-pedido', {
+      ...pedido.toObject(),
+      estadoLegible: WorkflowService.ESTADOS_LEGIBLES[status],
+      icono: WorkflowService.obtenerIconoEstado(status),
+      color: WorkflowService.obtenerColorEstado(status)
+    });
+
+    console.log(`🔄 Pedido #${pedido.numeroOrden}: ${WorkflowService.ESTADOS_LEGIBLES[estadoAnterior]} → ${WorkflowService.ESTADOS_LEGIBLES[status]} (${rol})`);
+
+    res.json({ 
+      success: true,
+      pedido: pedido,
+      estadoAnterior: WorkflowService.ESTADOS_LEGIBLES[estadoAnterior],
+      estadoNuevo: WorkflowService.ESTADOS_LEGIBLES[status]
+    });
   } catch (error) {
     console.error('Error actualizando estado:', error);
     res.status(500).json({ error: 'Error actualizando estado.' });
@@ -149,8 +194,44 @@ app.get('/api/pedido/:id/status', async (req, res) => {
   try {
     const pedido = await Pedido.findOne({ numeroOrden: req.params.id });
     if (!pedido) return res.status(404).json({ error: 'No encontrado' });
-    res.json({ estado: pedido.status });
-  } catch (error) { res.status(500).json({ error: 'Error' }); }
+    
+    res.json({ 
+      estado: pedido.status,
+      estadoLegible: WorkflowService.ESTADOS_LEGIBLES[pedido.status],
+      icono: WorkflowService.obtenerIconoEstado(pedido.status),
+      color: WorkflowService.obtenerColorEstado(pedido.status),
+      esFinal: WorkflowService.esFinal(pedido.status),
+      numeroOrden: pedido.numeroOrden,
+      cliente: pedido.cliente,
+      total: pedido.total
+    });
+  } catch (error) { 
+    res.status(500).json({ error: 'Error' }); 
+  }
+});
+
+// 7. Obtener transiciones disponibles para un pedido (Staff)
+app.get('/api/pedido/:id/transiciones', verificarToken, async (req, res) => {
+  try {
+    const pedido = await Pedido.findById(req.params.id);
+    if (!pedido) return res.status(404).json({ error: 'Pedido no encontrado' });
+    
+    const siguientesEstados = WorkflowService.obtenerSiguientesEstados(
+      pedido.status, 
+      req.user.role
+    );
+    
+    res.json({
+      success: true,
+      estadoActual: {
+        codigo: pedido.status,
+        nombre: WorkflowService.ESTADOS_LEGIBLES[pedido.status]
+      },
+      transicionesDisponibles: siguientesEstados
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Error obteniendo transiciones' });
+  }
 });
 
 // --- 5. SOCKET.IO y ARRANQUE DEL SERVIDOR ---
