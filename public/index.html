@@ -637,7 +637,6 @@
             container.innerHTML = products.map(p => {
                 const pString = JSON.stringify(p).replace(/"/g, '&quot;');
                 return `
-                <div class="col-12 col-md-6 col-lg-4">
                     <div class="product-card-modern" onclick="window.openModal(${pString})">
                         <div class="product-img-container">
                             ${p.imagen ? 
@@ -655,7 +654,6 @@
                             </button>
                         </div>
                     </div>
-                </div>
             `}).join('');
 
             function agregarAlCarrito(id) {

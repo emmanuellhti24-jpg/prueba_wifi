@@ -36,38 +36,10 @@ function initAdminTheme() {
     const savedTheme = localStorage.getItem('momoys-theme') || 'light';
     document.documentElement.setAttribute('data-theme', savedTheme);
     
-    // Crear toggle button para admin
-    createAdminThemeToggle();
-    
     // Escuchar cambios de tema
     window.addEventListener('themeChanged', (e) => {
         updateAdminTheme(e.detail.theme);
     });
-}
-
-function createAdminThemeToggle() {
-    const themeToggle = document.createElement('button');
-    themeToggle.className = 'theme-toggle admin-theme-toggle';
-    themeToggle.id = 'adminThemeToggle';
-    themeToggle.innerHTML = '<i class="fas fa-sun"></i>';
-    themeToggle.setAttribute('aria-label', 'Cambiar tema');
-    
-    // Posicionar en el header del admin
-    const header = document.querySelector('.staff-header') || document.body;
-    header.appendChild(themeToggle);
-    
-    // Event listener
-    themeToggle.addEventListener('click', () => {
-        const currentTheme = document.documentElement.getAttribute('data-theme');
-        const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-        
-        document.documentElement.setAttribute('data-theme', newTheme);
-        localStorage.setItem('momoys-theme', newTheme);
-        updateAdminTheme(newTheme);
-    });
-    
-    // Actualizar icono inicial
-    updateAdminTheme(localStorage.getItem('momoys-theme') || 'light');
 }
 
 function updateAdminTheme(theme) {

@@ -181,6 +181,7 @@ body.staff-mode {
 .staff-sidebar {
     width: 250px;
     height: 100vh;
+    height: 100dvh; /* Ajuste para tablets: altura dinámica real */
     background-color: var(--bg-sidebar);
     position: fixed;
     left: 0;
@@ -669,60 +670,6 @@ body.admin-mode .admin-toolbar {
   }
 }
 
-/* Contenedor principal del menú */
-#menu-grid {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  align-items: center;
-  padding: 20px;
-  background-color: #f44336; /* Fondo rojo para el contenedor del menú */
-  border-radius: 10px;
-}
-
-.product-card {
-    position: relative;
-    cursor: pointer;
-}
-
-
-/* Cada tarjeta de producto */
-.product-card {
-  background-color: #fff; /* Fondo blanco para cada producto */
-  border-radius: 8px;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); /* Sombra sutil */
-  margin-bottom: 20px;
-  width: 100%;
-  max-width: 250px; /* Ancho máximo para los productos */
-  padding: 10px;
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-}
-
-.product-img {
-  width: 100%;
-  height: auto;
-  border-radius: 8px;
-}
-
-.product-info {
-  padding: 10px 0;
-}
-
-.product-name {
-  font-size: 16px;
-  font-weight: bold;
-  color: #333;
-}
-
-.product-price {
-  font-size: 14px;
-  color: #777;
-  margin-top: 10px;
-}
-
 /* ── Título MENÚ ── */
 .w-100.text-center h2,
 h2.text-center {
@@ -786,22 +733,6 @@ h2.text-center {
   transform: translateY(0);
 }
 
-/* Responsividad */
-@media screen and (max-width: 768px) {
-  #menu-grid {
-    flex-direction: column;
-    align-items: center;
-  }
-
-  .product-card {
-    width: 80%; /* Reducir el tamaño en pantallas pequeñas */
-  }
-
-  #pedir-btn {
-    font-size: 16px; /* Ajustar el tamaño del botón */
-  }
-}
-/*Eliminado*/
 
 /* Estilos para las tablas en la sección de Staff */
 /* Estilos generales para la tarjeta que contiene las tablas */
