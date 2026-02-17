@@ -625,7 +625,7 @@ body.admin-mode .admin-toolbar {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-10px); }
 }
-}
+
 
 /* --- TOGGLE THEME BUTTON --- */
 .theme-toggle {
@@ -723,61 +723,67 @@ body.admin-mode .admin-toolbar {
   margin-top: 10px;
 }
 
-/* Botón de agregar producto */
-.btn-add {
-  background-color: #FF9800; /* Naranja para el botón */
-  color: white;
-  padding: 8px 16px;
+/* ── Título MENÚ ── */
+.w-100.text-center h2,
+h2.text-center {
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  color: #f1c40f !important;
+  text-transform: uppercase;
+  border-bottom: 2px solid #c0392b;
+  padding-bottom: 10px;
+  display: inline-block;
+}
+
+/* ── Botones base ── */
+#pedir-btn,
+#cancel-btn {
+  padding: 12px 36px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
   border: none;
-  border-radius: 5px;
+  border-radius: 4px;
   cursor: pointer;
-  font-size: 14px;
-  transition: background-color 0.3s ease;
+  transition: all 0.25s ease;
 }
 
-.btn-add:hover {
-  background-color: #f57c00; /* Cambio de color al pasar el mouse */
-}
-
-/* Fondo y estilo para el botón "Pedir" */
+/* ── PEDIR — acción principal ── */
 #pedir-btn {
-  background-color: #FFEB3B;
-  color: #333;
-  padding: 15px 25px;
-  border-radius: 5px;
-  font-size: 18px;
-  cursor: pointer;
-  width: 100%;
-  max-width: 400px;
-  margin-top: 30px;
-  transition: background-color 0.3s ease;
+  background: #c0392b;
+  color: #f1f1f1;
+  box-shadow: 0 4px 14px rgba(192, 57, 43, 0.35);
 }
 
 #pedir-btn:hover {
-  background-color: #FBC02D; /* Amarillo más oscuro */
+  background: #e74c3c;
+  box-shadow: 0 6px 20px rgba(231, 76, 60, 0.5);
+  transform: translateY(-2px);
 }
 
-/* Estilo para el título del menú */
-#menu-grid h2 {
-  font-size: 24px;
-  font-weight: bold;
-  color: white;
-  margin-bottom: 20px;
+#pedir-btn:active {
+  transform: translateY(0);
+  box-shadow: none;
 }
 
-/* Estilo para el botón de cancelar */
+/* ── CANCELAR — acción secundaria ── */
 #cancel-btn {
-  background-color: #d32f2f;
-  color: white;
-  padding: 10px 20px;
-  border-radius: 5px;
-  cursor: pointer;
-  font-size: 16px;
-  margin-left: 20px;
+  background: transparent;
+  color: #9a9a9a;
+  border: 1px solid #3a3a3a;
 }
 
 #cancel-btn:hover {
-  background-color: #c62828; /* Rojo más oscuro al pasar el mouse */
+  background: #2a2a2a;
+  color: #f1f1f1;
+  border-color: #6b6b6b;
+  transform: translateY(-2px);
+}
+
+#cancel-btn:active {
+  transform: translateY(0);
 }
 
 /* Responsividad */
@@ -1048,6 +1054,94 @@ body.admin-mode .admin-toolbar {
     border: 1px solid #eee;
     display: flex;
     align-items: center;
+}
+
+.cart-float {
+  position: fixed;
+  bottom: 28px;
+  right: 28px;
+  z-index: 9999;
+
+  display: flex;
+  align-items: center;
+  gap: 0;
+
+  background: #1e1e1e;
+  border: 1px solid #3a3a3a;
+  border-radius: 50px;
+  padding: 12px 14px;
+  cursor: pointer;
+
+  width: 54px;
+  overflow: hidden;
+  transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+              padding 0.35s ease,
+              box-shadow 0.3s ease;
+
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+.cart-float:hover {
+  width: 200px;
+  padding: 12px 20px;
+  box-shadow: 0 6px 28px rgba(192, 57, 43, 0.35);
+  border-color: #c0392b;
+}
+
+/* Icono + badge */
+.cart-float__icon {
+  position: relative;
+  flex-shrink: 0;
+  color: #f39c12;
+  font-size: 1.2rem;
+}
+
+.cart-badge {
+  position: absolute;
+  top: -8px;
+  right: -10px;
+  background: #c0392b;
+  color: #f1f1f1;
+  font-size: 0.65rem;
+  font-weight: 700;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #1e1e1e;
+}
+
+/* Info expandible */
+.cart-float__info {
+  display: flex;
+  flex-direction: column;
+  margin-left: 12px;
+  opacity: 0;
+  transform: translateX(-6px);
+  transition: opacity 0.25s ease 0.1s,
+              transform 0.25s ease 0.1s;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.cart-float:hover .cart-float__info {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.cart-float__items {
+  font-size: 0.7rem;
+  color: #9a9a9a;
+  line-height: 1;
+}
+
+.cart-float__price {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #f1c40f;
+  line-height: 1.3;
 }
 
 .qty-selector {

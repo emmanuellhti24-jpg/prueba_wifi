@@ -7,6 +7,8 @@ let charts = {}; // Almacenar instancias de gráficas
 // --- ESTADO Y CACHÉ ---
 let currentRecipe = [];
 let inventoryList = [];
+let productsList = [];
+let usersList = [];
 
 // --- INICIALIZACIÓN ---
 document.addEventListener('DOMContentLoaded', () => {
@@ -14,6 +16,9 @@ document.addEventListener('DOMContentLoaded', () => {
         window.location.href = '/';
         return;
     }
+    
+    // Inicializar tema para admin
+    initAdminTheme();
     
     socket = io();
     document.getElementById('user-role-badge').innerText = role.toUpperCase();
@@ -24,6 +29,83 @@ document.addEventListener('DOMContentLoaded', () => {
     // Cargar la pestaña inicial
     switchTab('orders');
 });
+
+// --- THEME MANAGEMENT PARA ADMIN ---
+function initAdminTheme() {
+    // Aplicar tema guardado
+    const savedTheme = localStorage.getItem('momoys-theme') || 'light';
+    document.documentElement.setAttribute('data-theme', savedTheme);
+    
+    // Crear toggle button para admin
+    createAdminThemeToggle();
+    
+    // Escuchar cambios de tema
+    window.addEventListener('themeChanged', (e) => {
+        updateAdminTheme(e.detail.theme);
+    });
+}
+
+function createAdminThemeToggle() {
+    const themeToggle = document.createElement('button');
+    themeToggle.className = 'theme-toggle admin-theme-toggle';
+    themeToggle.id = 'adminThemeToggle';
+    themeToggle.innerHTML = '<i class="fas fa-sun"></i>';
+    themeToggle.setAttribute('aria-label', 'Cambiar tema');
+    
+    // Posicionar en el header del admin
+    const header = document.querySelector('.staff-header') || document.body;
+    header.appendChild(themeToggle);
+    
+    // Event listener
+    themeToggle.addEventListener('click', () => {
+        const currentTheme = document.documentElement.getAttribute('data-theme');
+        const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+        
+        document.documentElement.setAttribute('data-theme', newTheme);
+        localStorage.setItem('momoys-theme', newTheme);
+        updateAdminTheme(newTheme);
+    });
+    
+    // Actualizar icono inicial
+    updateAdminTheme(localStorage.getItem('momoys-theme') || 'light');
+}
+
+function updateAdminTheme(theme) {
+    const toggle = document.getElementById('adminThemeToggle');
+    if (toggle) {
+        const icon = theme === 'dark' ? 'fa-moon' : 'fa-sun';
+        toggle.innerHTML = `<i class="fas ${icon}"></i>`;
+    }
+    
+    // Actualizar gráficas si existen
+    if (charts && Object.keys(charts).length > 0) {
+        updateChartsTheme(theme);
+    }
+}
+
+function updateChartsTheme(theme) {
+    const chartColors = theme === 'dark' ? {
+        text: '#e8e8e8',
+        grid: 'rgba(255,255,255,0.1)',
+        background: 'rgba(45,45,45,0.8)'
+    } : {
+        text: '#2c2c2c',
+        grid: 'rgba(0,0,0,0.1)',
+        background: 'rgba(255,255,255,0.8)'
+    };
+    
+    // Actualizar cada gráfica
+    Object.values(charts).forEach(chart => {
+        if (chart && chart.options) {
+            chart.options.plugins.legend.labels.color = chartColors.text;
+            chart.options.scales.x.ticks.color = chartColors.text;
+            chart.options.scales.y.ticks.color = chartColors.text;
+            chart.options.scales.x.grid.color = chartColors.grid;
+            chart.options.scales.y.grid.color = chartColors.grid;
+            chart.update();
+        }
+    });
+}
 
 function aplicarPermisos(userRole) {
     const allTabs = document.querySelectorAll('.nav-pills-custom .btn');
@@ -88,15 +170,15 @@ async function loadMenu() {
 
     const res = await fetch(`${API_URL}/products`);
     const products = await res.json();
-    const allProds = [...(products.hamburguesas || []), ...(products.hotdogs || []), ...(products.extras || [])];
+    productsList = [...(products.hamburguesas || []), ...(products.hotdogs || []), ...(products.extras || [])];
 
-    document.getElementById('menu-table-body').innerHTML = allProds.map(p => `
+    document.getElementById('menu-table-body').innerHTML = productsList.map(p => `
         <tr>
             <td><img src="${p.imagen || 'https://via.placeholder.com/40'}" width="40" height="40" class="me-2 rounded" style="object-fit: cover;"> ${p.nombre}</td>
             <td><span class="badge bg-primary">${p.categoria}</span></td>
             <td>${p.precios?.['1'] ? `1:$${p.precios['1']} | 2:$${p.precios['2']}` : `$${p.precioUnitario}`}</td>
             <td class="action-column">
-                <button class="action-btn" onclick='editProduct(${JSON.stringify(p)})'>✏️</button>
+                <button class="action-btn" onclick="editProduct('${p.id}')">✏️</button>
                 <button class="action-btn" onclick="deleteProduct('${p.id}')">🗑️</button>
             </td>
         </tr>
@@ -105,13 +187,14 @@ async function loadMenu() {
 
 async function loadInventory() {
     const res = await fetch(`${API_URL}/inventory`, { headers: { 'Authorization': `Bearer ${token}` } });
-    const items = await res.json();
-    document.querySelector('#inventory-table tbody').innerHTML = items.map(i => `
+    inventoryList = await res.json();
+    document.querySelector('#inventory-table tbody').innerHTML = inventoryList.map(i => `
         <tr>
             <td>${i.nombre}</td>
             <td>${i.cantidad} ${i.unidad}</td>
             <td><span class="badge ${i.cantidad < i.minimo ? 'bg-danger' : 'bg-success'}">${i.cantidad < i.minimo ? 'BAJO' : 'OK'}</span></td>
             <td class="action-column">
+                <button class="action-btn" style="background-color:#3498db; margin-right:5px;" onclick="editInventory('${i._id}')">✏️</button>
                 <button class="action-btn" onclick="deleteInv('${i._id}')">🗑️</button>
             </td>
         </tr>
@@ -120,12 +203,15 @@ async function loadInventory() {
 
 async function loadUsers() {
     const res = await fetch(`${API_URL}/users`, { headers: { 'Authorization': `Bearer ${token}` } });
-    const users = await res.json();
-    document.querySelector('#users-table tbody').innerHTML = users.map(u => `
+    usersList = await res.json();
+    document.querySelector('#users-table tbody').innerHTML = usersList.map(u => `
         <tr>
             <td>${u.username}</td>
             <td><span class="badge bg-secondary">${u.role}</span></td>
-            <td class="action-column">${u.role !== 'admin' ? `<button class="action-btn" onclick="deleteUser('${u._id}')">🗑️</button>` : ''}</td>
+            <td class="action-column">
+                <button class="action-btn" style="background-color:#3498db; margin-right:5px;" onclick="editUser('${u._id}')">✏️</button>
+                ${u.role !== 'admin' ? `<button class="action-btn" onclick="deleteUser('${u._id}')">🗑️</button>` : ''}
+            </td>
         </tr>
     `).join('');
 }
@@ -348,20 +434,25 @@ function saveInventory() {
 }
 
 function saveUser() {
+    const id = document.getElementById('u-id').value;
     const data = {
         username: document.getElementById('u-name').value,
         password: document.getElementById('u-pass').value,
         role: document.getElementById('u-role').value
     };
-    fetch(`${API_URL}/users`, {
-        method: 'POST',
+    
+    const method = id ? 'PUT' : 'POST';
+    const url = id ? `${API_URL}/users/${id}` : `${API_URL}/users`;
+
+    fetch(url, {
+        method: method,
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify(data)
     }).then(() => {
         bootstrap.Modal.getInstance(document.getElementById('modal-user')).hide();
         loadUsers();
-        showToast('Usuario creado correctamente', 'success');
-    }).catch(() => showToast('Error al crear usuario', 'error'));
+        showToast(id ? 'Usuario actualizado' : 'Usuario creado', 'success');
+    }).catch(() => showToast('Error al guardar usuario', 'error'));
 }
 
 function saveStaff() {
@@ -425,10 +516,11 @@ function openInventoryModal(i = null) {
     new bootstrap.Modal(document.getElementById('modal-inventory')).show();
 }
 
-function openUserModal() {
-    document.getElementById('u-name').value = '';
+function openUserModal(u = null) {
+    document.getElementById('u-id').value = u?._id || '';
+    document.getElementById('u-name').value = u?.username || '';
     document.getElementById('u-pass').value = '';
-    document.getElementById('u-role').value = 'cashier';
+    document.getElementById('u-role').value = u?.role || 'cashier';
     new bootstrap.Modal(document.getElementById('modal-user')).show();
 }
 
@@ -455,7 +547,10 @@ function addRecipeItem() {
 function renderRecipeList() {
     const list = document.getElementById('recipe-list');
     list.innerHTML = currentRecipe.map((r, i) => {
-        const name = inventoryList.find(x => x._id === (r.insumo._id || r.insumo))?.nombre || 'Insumo no encontrado';
+        // Validación segura para evitar error si insumo es null (producto borrado o error de datos)
+        const insumoId = r.insumo ? (r.insumo._id || r.insumo) : null;
+        const name = insumoId ? (inventoryList.find(x => x._id === insumoId)?.nombre || 'Insumo no encontrado') : 'Insumo eliminado';
+
         return `
           <li class="list-group-item" onclick="setActiveItem(this)">
             <span><i class="fas fa-caret-right me-2"></i>${name} <strong class="ms-1">x ${r.cantidad}</strong></span>
@@ -471,7 +566,20 @@ function setActiveItem(el) {
     el.classList.add('active');
 }
 
-function editProduct(p) { openProductModal(p); }
+function editProduct(id) { 
+    const p = productsList.find(x => x.id === id);
+    if (p) openProductModal(p);
+}
+
+function editInventory(id) {
+    const i = inventoryList.find(x => x._id === id);
+    if (i) openInventoryModal(i);
+}
+
+function editUser(id) {
+    const u = usersList.find(x => x._id === id);
+    if (u) openUserModal(u);
+}
 
 function logout() {
     localStorage.clear();

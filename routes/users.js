@@ -41,6 +41,23 @@ router.put('/:id/role', async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
+// PUT: Actualizar usuario completo (username, password, role)
+router.put('/:id', async (req, res, next) => {
+  try {
+    const { username, password, role } = req.body;
+    const updateData = { username, role };
+    
+    if (password && password.trim() !== '') {
+        updateData.password = await bcrypt.hash(password, 10);
+    }
+
+    const user = await Usuario.findByIdAndUpdate(req.params.id, updateData, { new: true });
+    if (!user) return res.status(404).json({ message: 'Usuario no encontrado' });
+
+    res.json({ success: true, message: 'Usuario actualizado' });
+  } catch (error) { next(error); }
+});
+
 // DELETE: Eliminar usuario
 router.delete('/:id', async (req, res, next) => {
   try {

@@ -8,7 +8,6 @@
     <!-- PRELOAD CRÍTICO PARA PERFORMANCE -->
     <link rel="preload" href="styles.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
     <link rel="preload" href="carrito.js" as="script">
-    <link rel="preload" href="js/theme.js" as="script">
     <link rel="preload" href="bootstrap.min.css" as="style">
     
     <!-- DNS PREFETCH para recursos externos -->
@@ -106,17 +105,17 @@
     </div>
 
     <!-- Carrito Flotante -->
-    <div class="cart-float" id="cart-float" style="display: none;" onclick="window.openCartModal()">
-        <i class="fas fa-shopping-cart fa-lg"></i>
-        <div class="cart-badge" id="cart-count">0</div>
-    </div>
-
-
-<!-- Botón flotante carrito -->
-<button id="btnCarrito" class="carrito-float" onclick="abrirCarrito()">
-    <i class="fas fa-shopping-cart"></i> 
-    <span id="contadorCarrito">0</span>
-</button>
+    <!-- Carrito Flotante — Pill Expandible -->
+<div class="cart-float" id="cart-float" style="display: none;" onclick="window.openCartModal()">
+  <div class="cart-float__icon">
+    <i class="fas fa-shopping-cart"></i>
+    <div class="cart-badge" id="cart-count">0</div>
+  </div>
+  <div class="cart-float__info">
+    <span class="cart-float__items" id="cart-items-label">0 ítems</span>
+    <span class="cart-float__price" id="cart-total-label">$0.00</span>
+  </div>
+</div>
 
 
     <!-- PASO 1: NOMBRE -->
@@ -185,7 +184,7 @@
     <!-- MODAL PRODUCTO -->
     <div class="modal fade" id="productModal" tabindex="-1">
         <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
-            <div class="modal-content text-dark">
+            <div class="modal-content bg-white text-dark">
                 <div class="modal-header border-0 pb-0">
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
@@ -219,7 +218,7 @@
     <!-- MODAL CARRITO -->
     <div class="modal fade" id="cartModal" tabindex="-1">
         <div class="modal-dialog modal-dialog-centered modal-lg">
-            <div class="modal-content">
+            <div class="modal-content bg-white text-dark">
                 <div class="modal-header" style="background: #D35400; color: white;">
                     <h5 class="modal-title"><i class="fas fa-shopping-cart me-2"></i>Tu Carrito</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
@@ -248,7 +247,7 @@
     <!-- MODAL LOGIN STAFF -->
     <div class="modal fade" id="loginModal" tabindex="-1">
         <div class="modal-dialog modal-dialog-centered modal-sm">
-            <div class="modal-content border-0">
+            <div class="modal-content border-0 bg-white">
                 <div class="modal-body text-center p-4">
                     <i class="fas fa-user-shield fa-2x text-dark mb-3"></i>
                     <h5 class="fw-bold mb-3 text-dark">Acceso Staff</h5>
@@ -281,7 +280,6 @@
     
     <script src="/socket.io/socket.io.js"></script>
     <script src="bootstrap.bundle.min.js"></script>
-    <script src="js/theme.js"></script>
     
     <script>
         // Inicialización segura de Socket.io
@@ -496,8 +494,13 @@
             }
             
             currentOrder.total = total;
-            // document.getElementById('total-display').innerText = total;
-            document.getElementById('cart-count').innerText = currentOrder.items.reduce((sum, i) => sum + i.qty, 0);
+            
+            const totalQty = currentOrder.items.reduce((sum, i) => sum + i.qty, 0);
+            document.getElementById('cart-count').innerText = totalQty;
+
+            // Actualizar etiquetas del carrito flotante
+            if (document.getElementById('cart-items-label')) document.getElementById('cart-items-label').innerText = `${totalQty} ítems`;
+            if (document.getElementById('cart-total-label')) document.getElementById('cart-total-label').innerText = `$${total.toFixed(2)}`;
         }
 
         function renderizarCarrito() {
@@ -677,7 +680,7 @@
             // Agregar Título y Botones al contenedor
             container.innerHTML = `<h2 class="w-100 text-center text-white mb-4">MENÚ</h2>` + container.innerHTML + `
                 <div class="w-100 d-flex justify-content-center flex-wrap gap-3 mt-4">
-                    <button id="pedir-btn" onclick="irAlCarrito()">PEDIR</button>
+                    <button id="pedir-btn" onclick="window.openCartModal()">PEDIR</button>
                     <button id="cancel-btn" onclick="window.cancelarPedido()">Cancelar</button>
                 </div>
             `;
@@ -809,6 +812,7 @@
                     // Aplanar estructura
                     menuData = [...(data.hamburguesas||[]), ...(data.extras||[]), ...(data.hotdogs||[]), ...(data.bebidas||[])];
                     renderMenu(menuData);
+                    updateCart(); // Recalcular totales una vez cargado el menú
                 })
                 .catch(err => {
                     console.error(err);
