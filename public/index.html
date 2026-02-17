@@ -4,11 +4,51 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Momoy's Burger</title>
+    
+    <!-- PRELOAD CRÍTICO PARA PERFORMANCE -->
+    <link rel="preload" href="styles.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <link rel="preload" href="carrito.js" as="script">
+    <link rel="preload" href="js/theme.js" as="script">
+    <link rel="preload" href="bootstrap.min.css" as="style">
+    
+    <!-- DNS PREFETCH para recursos externos -->
+    <link rel="dns-prefetch" href="//cdnjs.cloudflare.com">
+    
+    <!-- CSS CRÍTICO INLINE - DARK THEME ENFORCED -->
+    <style>
+        /* CRITICAL CSS - Dark theme only */
+        body { 
+            font-family: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
+            color: #9a9a9a;
+            margin: 0;
+            font-weight: 300;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .step-container {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            padding: 32px 20px;
+        }
+        .hidden { display: none !important; }
+        .client-title {
+            color: #f1c40f;
+            font-weight: 700;
+            text-shadow: 2px 2px 8px rgba(0,0,0,0.8);
+        }
+        .carrito-float { display: none !important; } /* Hidden by default */
+        body.hamburger-menu .carrito-float { display: flex !important; }
+    </style>
+    
     <!-- CSS Dependencies -->
     <!-- Usar versión local para evitar bloqueos si no hay internet -->
     <link href="bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css">
+    <noscript><link rel="stylesheet" href="styles.css"></noscript>
     
     <style>
         .step-container {
@@ -221,8 +261,27 @@
     </div>
 
     <!-- SCRIPTS AL FINAL -->
+    <!-- CARGA ASÍNCRONA DE CSS NO CRÍTICO -->
+    <script>
+        // Cargar styles.css de forma asíncrona después del critical CSS
+        const loadCSS = (href) => {
+            const link = document.createElement('link');
+            link.rel = 'stylesheet';
+            link.href = href;
+            document.head.appendChild(link);
+        };
+        
+        // Cargar CSS no crítico después del DOMContentLoaded
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => loadCSS('styles.css'));
+        } else {
+            loadCSS('styles.css');
+        }
+    </script>
+    
     <script src="/socket.io/socket.io.js"></script>
     <script src="bootstrap.bundle.min.js"></script>
+    <script src="js/theme.js"></script>
     
     <script>
         // Inicialización segura de Socket.io

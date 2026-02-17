@@ -1,56 +1,155 @@
 /* --- ESTILOS MAESTROS (MOMOY'S BURGER) --- */
-body { font-family: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif; }
+:root {
+    /* DARK THEME ENFORCED - PALETA APROBADA */
+    --bg-primary: #1a1a1a;
+    --bg-secondary: #2a2a2a;
+    --bg-tertiary: #3a3a3a;
+    --bg-card: #1e1e1e;
+    --bg-darker: #0d0d0d;
+    --bg-panel: #111111;
+    
+    /* GRAYS APROBADOS */
+    --gray-light: #9a9a9a;
+    --gray-medium: #6b6b6b;
+    --gray-dark: #4a4a4a;
+    
+    /* REDS APROBADOS */
+    --red-primary: #e74c3c;
+    --red-secondary: #c0392b;
+    --red-accent: #ff4444;
+    
+    /* YELLOWS/AMBERS APROBADOS */
+    --yellow-primary: #f1c40f;
+    --yellow-secondary: #f39c12;
+    --yellow-accent: #ffb300;
+    
+    /* TEXT COLORS */
+    --text-primary: #9a9a9a;
+    --text-secondary: #6b6b6b;
+    --text-accent: #f1c40f;
+    
+    /* SHADOWS & BORDERS */
+    --shadow-dark: 0 4px 15px rgba(0,0,0,0.6);
+    --shadow-subtle: 0 2px 8px rgba(0,0,0,0.4);
+    --border-dark: rgba(106, 107, 107, 0.2);
+    --glow-red: 0 0 20px rgba(231, 76, 60, 0.3);
+    --glow-yellow: 0 0 20px rgba(241, 196, 15, 0.3);
+    
+    /* TRANSITIONS */
+    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
 
-/* 1. MODO CLIENTE (ROJO) */
-body:not(.staff-mode) {
-    background-color: #F9F7F2; /* Beige claro */
-    color: #2C3E50; /* Texto oscuro */
+body { 
+    font-family: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
     min-height: 100vh;
-    background-image: radial-gradient(circle, #a30000 0%, #680000 100%); /*Eliminado*/
-    background: linear-gradient(135deg, #ff2727 0%, #ff2727 100%);/*Eliminado*/
+    transition: var(--transition-smooth);
+    font-weight: 300; /* Lighter font weight on dark */
+}
+
+/* DARK THEME ENFORCED - NO LIGHT MODE */
+body:not(.staff-mode) {
+    background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
+    color: var(--text-primary);
 }
 
 .client-title {
-    font-weight: 900;
-    color: #FFC107; /* Amarillo Oro */
-    text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
-    letter-spacing: 1px;
+    font-weight: 700; /* Reduced from 900 for modern look */
+    color: var(--yellow-primary);
+    text-shadow: 2px 2px 8px rgba(0,0,0,0.8);
+    letter-spacing: 0.5px; /* Reduced for cleaner look */
 }
 
 .subtitle {
     font-size: 1.3rem;
     font-weight: 300;
+    color: var(--text-secondary);
     opacity: 0.9;
 }
 
-/* Botones Cliente */
+/* BOTONES MODERNOS DARK THEME */
 .btn-primary-client, .btn-momoy {
-    background-color: #FFC107 !important;
-    color: #3e2723 !important;
-    font-weight: 800;
-    border-radius: 50px;
-    border: none;
-    padding: 12px 25px; /*Considerar crear variables para el valor de px*/
+    background: linear-gradient(135deg, var(--red-primary), var(--red-secondary)) !important;
+    color: var(--text-primary) !important;
+    font-weight: 500; /* Lighter weight for modern look */
+    border-radius: 8px; /* Less rounded for minimalist look */
+    border: 1px solid var(--red-accent);
+    padding: 14px 28px; /* More padding for better touch targets */
     width: 100%;
-    box-shadow: 0 4px 0 #FFA000;
-    transition: transform 0.1s;
-    text-transform: uppercase;
+    box-shadow: var(--shadow-subtle), var(--glow-red);
+    transition: var(--transition-smooth);
+    text-transform: none; /* Remove uppercase for cleaner look */
+    letter-spacing: 0.5px;
 }
-.btn-primary-client:active { transform: translateY(2px); box-shadow: none; }
 
-/* Tarjetas Menú */
+.btn-primary-client:hover,
+.btn-momoy:hover {
+    background: linear-gradient(135deg, var(--red-accent), var(--red-primary)) !important;
+    transform: translateY(-1px); /* Subtle hover effect */
+    box-shadow: var(--shadow-dark), var(--glow-red);
+}
+
+.btn-primary-client:active,
+.btn-momoy:active { 
+    transform: translateY(0); 
+    box-shadow: var(--shadow-subtle);
+}
+
+/* TARJETAS MENÚ MEJORADAS - DARK THEME */
 .card-product {
-    background-color: rgba(120, 0, 0, 0.6);
-    border: 2px solid #b71c1c;
+    background: var(--bg-card);
+    border: 1px solid var(--border-dark);
+    border-radius: 12px; /* Less rounded for modern look */
+    padding: 24px; /* Increased padding for better spacing */
+    margin-bottom: 20px; /* Better gap between cards */
+    transition: var(--transition-smooth);
+    box-shadow: var(--shadow-subtle);
+    backdrop-filter: blur(10px);
+}
+
+.card-product:hover { 
+    transform: translateY(-4px); /* Subtle lift instead of scale */
+    border-color: var(--yellow-primary);
+    box-shadow: var(--shadow-dark), var(--glow-yellow);
+}
+
+/* MENU GRID LAYOUT MEJORADO */
+#menu-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 24px; /* Proper gap between items */
+    padding: 32px 20px; /* More padding around grid */
+    background: var(--bg-secondary);
     border-radius: 16px;
-    padding: 15px;/*Considerar crear variables para el valor de px*/
-    transition: transform 0.2s;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-    backdrop-filter: blur(5px);
-} /*Comentar*/
-.card-product:hover { transform: scale(1.03); border-color: #FFC107; }
-.item-title { font-weight: 800; font-size: 1.1rem; color: #FFD700; margin: 10px 0; }
-.prices { font-size: 0.9rem; color: white; margin-bottom: 10px; }
+    margin: 20px 0;
+}
+
+.item-title { 
+    font-weight: 600; /* Lighter weight */
+    font-size: 1.2rem; /* Slightly larger */
+    color: var(--yellow-primary); 
+    margin: 16px 0 12px 0; /* Better spacing */
+    line-height: 1.4; /* Better readability */
+}
+
+.prices { 
+    font-size: 1rem; /* Larger for better readability */
+    color: var(--text-primary); 
+    margin-bottom: 16px; /* More space */
+    line-height: 1.5; /* Better line height */
+    font-weight: 400;
+}
+
+/* SECTION TITLES */
+.menu-section-title {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: var(--yellow-primary);
+    margin: 32px 0 20px 0; /* Clear separation */
+    padding-bottom: 12px;
+    border-bottom: 2px solid var(--border-dark);
+}
 
 /* 2. MODO STAFF (MODERNO DARK) */
 body.staff-mode {
@@ -359,40 +458,215 @@ body.staff-mode .btn-outline-danger:hover {
     }
 }
 
-/* --- BOTÓN FLOTANTE CARRITO (ESTILO APP) --- */
+/* --- FAB CARRITO - SOLO MENÚ HAMBURGUESAS --- */
 .carrito-float {
   position: fixed;
-  bottom: 25px;
-  right: 25px;
-  width: 75px;
-  height: 75px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #ff4d4d, #ff1a1a);
-  color: white;
-  font-size: 28px;
-  border: none;
-  box-shadow: 0 8px 20px rgba(0,0,0,0.3);
+  bottom: 32px;
+  right: 32px;
+  width: 64px; /* Slightly smaller for modern look */
+  height: 64px;
+  border-radius: 16px; /* Less rounded, more modern */
+  background: linear-gradient(135deg, var(--red-primary), var(--red-secondary));
+  color: var(--text-primary);
+  font-size: 24px;
+  border: 1px solid var(--red-accent);
+  box-shadow: var(--shadow-dark), var(--glow-red);
   z-index: 999;
-  display: flex;
+  display: none; /* HIDDEN por defecto */
   align-items: center;
   justify-content: center;
-  transition: transform 0.2s ease;
+  transition: var(--transition-smooth);
+  cursor: pointer;
+  animation: none; /* No animation by default */
+  will-change: transform;
 }
 
 .carrito-float:hover {
-  transform: scale(1.1);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-dark), var(--glow-red);
 }
 
+/* VISIBILIDAD ESTRICTA - SOLO MENÚ HAMBURGUESAS */
+/* ❌ OCULTO EN TODAS LAS PANTALLAS POR DEFECTO */
+.carrito-float {
+  display: none !important;
+}
+
+/* ✅ VISIBLE SOLO EN MENÚ DE HAMBURGUESAS */
+body.hamburger-menu .carrito-float {
+  display: flex !important;
+}
+
+/* 🎯 BOUNCE SOLO CUANDO TIENE ITEMS EN MENÚ HAMBURGUESAS */
+body.hamburger-menu .carrito-float.has-items {
+  animation: fab-bounce 2s ease-in-out infinite;
+}
+
+/* ANIMACIÓN FAB OPTIMIZADA */
+@keyframes fab-bounce {
+  0%, 100% { 
+    transform: translateY(0); 
+  }
+  50% { 
+    transform: translateY(-6px);
+  }
+}
+
+/* --- CONTROLES CRUD ADMIN VISIBLES --- */
+.admin-controls {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-dark);
+}
+
+.admin-controls.hidden {
+  display: none;
+}
+
+/* BOTONES CRUD CON PALETA APROBADA */
+.btn-crud {
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: 1px solid;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--transition-smooth);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ADD BUTTON - YELLOW */
+.btn-add {
+  background: var(--yellow-primary);
+  color: var(--bg-primary);
+  border-color: var(--yellow-secondary);
+}
+
+.btn-add:hover {
+  background: var(--yellow-accent);
+  box-shadow: var(--glow-yellow);
+  transform: translateY(-1px);
+}
+
+/* EDIT BUTTON - GRAY */
+.btn-edit {
+  background: var(--gray-dark);
+  color: var(--text-primary);
+  border-color: var(--gray-medium);
+}
+
+.btn-edit:hover {
+  background: var(--gray-medium);
+  box-shadow: var(--shadow-subtle);
+  transform: translateY(-1px);
+}
+
+/* DELETE BUTTON - RED */
+.btn-delete {
+  background: var(--red-primary);
+  color: var(--text-primary);
+  border-color: var(--red-secondary);
+}
+
+.btn-delete:hover {
+  background: var(--red-accent);
+  box-shadow: var(--glow-red);
+  transform: translateY(-1px);
+}
+
+/* ADMIN TOOLBAR */
+.admin-toolbar {
+  position: fixed;
+  top: 20px;
+  left: 20px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-dark);
+  border-radius: 8px;
+  padding: 12px;
+  box-shadow: var(--shadow-dark);
+  z-index: 1000;
+  display: none;
+}
+
+body.admin-mode .admin-toolbar {
+  display: flex;
+  gap: 12px;
+}
+
+/* CONTADOR BADGE */
 #contadorCarrito {
   position: absolute;
   top: 8px;
   right: 8px;
-  background: white;
-  color: red;
+  background: var(--accent-yellow);
+  color: var(--text-primary);
   font-size: 14px;
   padding: 4px 7px;
   border-radius: 50%;
   font-weight: bold;
+  min-width: 24px;
+  text-align: center;
+  transition: var(--transition-theme);
+  display: none; /* Oculto cuando count = 0 */
+}
+
+/* Mostrar badge solo cuando hay items */
+.carrito-float.has-items #contadorCarrito {
+  display: block;
+}
+
+/* ANIMACIÓN BOUNCE LEGACY - Mantenida para compatibilidad */
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+}
+
+/* --- TOGGLE THEME BUTTON --- */
+.theme-toggle {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: var(--bg-card);
+  border: 2px solid var(--border-light);
+  color: var(--text-primary);
+  font-size: 20px;
+  cursor: pointer;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--transition-theme);
+  box-shadow: var(--shadow-light);
+}
+
+.theme-toggle:hover {
+  transform: scale(1.1);
+  background: var(--accent-orange);
+  color: white;
+}
+
+[data-theme="dark"] .theme-toggle {
+  box-shadow: 0 4px 15px rgba(0,0,0,0.4), 0 0 20px rgba(255, 107, 53, 0.2);
+}
+
+/* RESPONSIVE THEME TOGGLE */
+@media (max-width: 768px) {
+  .theme-toggle {
+    top: 15px;
+    right: 15px;
+    width: 45px;
+    height: 45px;
+    font-size: 18px;
+  }
 }
 
 /* Contenedor principal del menú */
