@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Staff - Panel de Control</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🍔</text></svg>">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="staff-mode">
+
+    <!-- OVERLAY MÓVIL -->
+    <div id="sidebar-overlay" class="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+    <!-- HEADER MÓVIL (Solo visible en < 992px) -->
+    <div class="mobile-header d-lg-none">
+        <button class="btn btn-link text-white p-0" onclick="toggleSidebar()">
+            <i class="fas fa-bars fa-lg"></i>
+        </button>
+        <span class="navbar-brand mb-0 h1">🍔 Panel</span>
+        <span class="badge bg-secondary" id="mobile-role-badge">STAFF</span>
+    </div>
+
+    <!-- SIDEBAR (Fija en Desktop, Drawer en Mobile) -->
+    <aside class="staff-sidebar" id="staff-sidebar">
+        <div class="p-3 d-flex align-items-center justify-content-between">
+            <span class="navbar-brand mb-0 h1 d-none d-lg-block">🍔 Panel Staff</span>
+            <span id="user-role-badge" class="badge bg-secondary d-none d-lg-inline-block"></span>
+            <button class="btn btn-link text-white d-lg-none" onclick="toggleSidebar()"><i class="fas fa-times"></i></button>
+        </div>
+        
+        <hr class="border-secondary my-0">
+
+        <div class="nav nav-pills nav-pills-custom flex-column p-3 gap-2">
+            <button class="btn active" data-tab="orders" onclick="switchTab('orders'); closeSidebarMobile()"><i class="fas fa-receipt me-3"></i> Pedidos</button>
+            <button class="btn" data-tab="menu" onclick="switchTab('menu'); closeSidebarMobile()"><i class="fas fa-hamburger me-3"></i> Menú</button>
+            <button class="btn" data-tab="inventory" onclick="switchTab('inventory'); closeSidebarMobile()"><i class="fas fa-boxes-stacked me-3"></i> Inventario</button>
+            <button class="btn" data-tab="users" onclick="switchTab('users'); closeSidebarMobile()"><i class="fas fa-users me-3"></i> Usuarios</button>
+            
+            <button class="btn" data-tab="metrics" onclick="switchTab('metrics'); closeSidebarMobile()"><i class="fas fa-chart-line me-3"></i> Métricas</button>
+        </div>
+
+        <div class="mt-auto p-3">
+            <button onclick="logout()" class="btn btn-outline-danger fw-bold w-100">
+                <i class="fas fa-sign-out-alt me-2"></i> Salir
+            </button>
+        </div>
+    </aside>
+
+    <!-- CONTENIDO PRINCIPAL (Scroll independiente) -->
+    <main class="staff-main">
+        <div class="container-fluid">
+
+        <!-- PESTAÑA PEDIDOS -->
+        <div id="view-orders" class="view-section active">
+            <div id="orders-grid" class="row g-3"></div>
+        </div>
+
+        <!-- PESTAÑA MENÚ -->
+        <div id="view-menu" class="view-section d-none">
+            <div class="card shadow-sm border-0 table-responsive-mobile">
+                <button class="new-item-btn" onclick="openProductModal()">+ Nuevo Producto</button>
+                <table class="staff-table">
+                    <thead><tr><th>ITEM</th><th>CATEGORÍA</th><th>PRECIOS</th><th class="action-column">ACCIONES</th></tr></thead>
+                    <tbody id="menu-table-body"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- PESTAÑA INVENTARIO -->
+        <div id="view-inventory" class="view-section d-none">
+            <div class="card shadow-sm border-0 table-responsive-mobile">
+                <button class="new-item-btn" onclick="openInventoryModal()">+ Nuevo Insumo</button>
+                <table class="staff-table" id="inventory-table">
+                    <thead><tr><th>ITEM</th><th>STOCK</th><th>ESTADO</th><th class="action-column">ACCIONES</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- PESTAÑA USUARIOS -->
+        <div id="view-users" class="view-section d-none">
+            <div class="card shadow-sm border-0 table-responsive-mobile">
+                <button class="new-item-btn" onclick="openUserModal()">+ Nuevo Usuario</button>
+                <table class="staff-table" id="users-table">
+                    <thead><tr><th>USUARIO</th><th>ROL</th><th class="action-column">ACCIONES</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+       
+
+        <!-- PESTAÑA MÉTRICAS -->
+        <div id="view-metrics" class="view-section d-none">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h3 class="m-0">📈 Rendimiento del Negocio</h3>
+                <div class="d-flex gap-2">
+                    <input type="date" id="date-start" class="form-control form-control-sm">
+                    <input type="date" id="date-end" class="form-control form-control-sm">
+                    <button class="btn btn-primary btn-sm" onclick="loadMetrics()">Filtrar</button>
+                </div>
+            </div>
+
+            <div id="metrics-container" class="row g-3 mb-4">
+                <!-- KPIs se inyectan aquí -->
+            </div>
+
+            <div class="row g-4 chart-container-row">
+                <div class="col-12 col-lg-6"><div class="chart-card"><canvas id="financialChart"></canvas></div></div>
+                <div class="col-12 col-lg-6"><div class="chart-card"><canvas id="categoryChart"></canvas></div></div>
+                <div class="col-12"><div class="chart-card"><canvas id="topProductsChart"></canvas></div></div>
+            </div>
+        </div>
+        </div>
+    </main>
+
+    <!-- MODAL PRODUCTO -->
+    <div class="modal fade" id="modal-product" tabindex="-1">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold"><i class="fas fa-hamburger me-2"></i>Producto</h5>
+                    <button class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="p-id">
+                    
+                    <!-- Info Básica -->
+                    <div class="mb-3">
+                        <h6 class="text-muted mb-3 text-uppercase small fw-bold">Información Básica</h6>
+                            <div class="row g-3">
+                                <div class="col-md-8">
+                                    <label class="form-label fw-bold small">Nombre</label>
+                                    <input type="text" id="p-name" class="form-control" placeholder="Nombre del producto">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label fw-bold small">Categoría</label>
+                                    <select id="p-cat" class="form-select"><option value="hamburguesas">Hamburguesa</option><option value="hotdogs">Hot Dog</option><option value="extras">Extras / Bebidas</option></select>
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-label fw-bold small">Imagen</label>
+                                    <input type="file" id="p-img-file" class="form-control" accept="image/*"><input type="hidden" id="p-img-current">
+                                </div>
+                            </div>
+                    </div>
+
+                    <!-- Precios -->
+                    <div class="mb-3">
+                        <h6 class="text-muted mb-3 text-uppercase small fw-bold">Precios y Promociones</h6>
+                            <div class="row g-2">
+                                <div class="col-4"><div class="form-floating"><input type="number" id="p-price1" class="form-control" placeholder="1x"><label>Precio 1x</label></div></div>
+                                <div class="col-4"><div class="form-floating"><input type="number" id="p-price2" class="form-control" placeholder="2x"><label>Precio 2x</label></div></div>
+                                <div class="col-4"><div class="form-floating"><input type="number" id="p-price3" class="form-control" placeholder="3x"><label>Precio 3x</label></div></div>
+                                <div class="col-12 mt-2"><label class="small text-muted">Precio Unitario (Base)</label><input type="number" id="p-unit" class="form-control"></div>
+                            </div>
+                    </div>
+
+                    <!-- Detalles -->
+                    <div class="mb-3">
+                        <h6 class="text-muted mb-3 text-uppercase small fw-bold">Detalles</h6>
+                            <div class="mb-3"><label class="fw-bold small">Ingredientes</label><input type="text" id="p-ing" class="form-control" placeholder="Ej: Cebolla, Tomate, Lechuga"><div class="form-text small">Separar por comas</div></div>
+                            <div class="mb-0"><label class="fw-bold small">Extras</label><input type="text" id="p-ext" class="form-control" placeholder="Ej: Queso:10, Tocino:15"><div class="form-text small">Formato: Nombre:Precio</div></div>
+                    </div>
+
+                    <!-- Receta -->
+                    <div class="mb-3">
+                        <h6 class="text-primary fw-bold mb-3"><i class="fas fa-blender me-2"></i>Receta / Inventario</h6>
+                            <div class="input-group mb-2">
+                                <select id="recipe-select" class="form-select"></select>
+                                <input type="number" id="recipe-qty" class="form-control" placeholder="Cant." style="max-width: 100px;">
+                                <button class="btn btn-primary" onclick="addRecipeItem()"><i class="fas fa-plus"></i></button>
+                            </div>
+                            <div class="rounded border p-2" style="max-height: 150px; overflow-y: auto; border-color: rgba(255,255,255,0.1) !important;">
+                                <ul id="recipe-list" class="list-group list-group-flush small"></ul>
+                            </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button class="btn btn-success px-4 fw-bold" onclick="saveProduct()"><i class="fas fa-save me-2"></i> Guardar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL INVENTARIO -->
+    <div class="modal fade" id="modal-inventory" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold"><i class="fas fa-boxes me-2"></i>Insumo</h5>
+                    <button class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="inv-id">
+                    
+                    <!-- Datos Principales -->
+                    <div class="mb-3">
+                        <h6 class="text-muted mb-3 text-uppercase small fw-bold">Datos del Insumo</h6>
+                            <div class="mb-3">
+                                <label class="form-label fw-bold small">Nombre</label>
+                                <input id="inv-name" class="form-control" placeholder="Ej: Pan de Hamburguesa">
+                            </div>
+                            <div class="row g-2">
+                                <div class="col-6">
+                                    <label class="form-label fw-bold small">Cantidad</label>
+                                    <input id="inv-qty" type="number" class="form-control" placeholder="0">
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label fw-bold small">Unidad</label>
+                                    <select id="inv-unit" class="form-select">
+                                        <option value="pza">Pieza</option>
+                                        <option value="g">Gramos</option>
+                                        <option value="kg">Kilos</option>
+                                        <option value="ml">Mililitros</option>
+                                    </select>
+                                </div>
+                            </div>
+                    </div>
+
+                    <!-- Costos y Control -->
+                    <div>
+                        <h6 class="text-muted mb-3 text-uppercase small fw-bold">Control de Stock</h6>
+                            <div class="row g-2">
+                                <div class="col-6">
+                                    <label class="form-label fw-bold small">Costo Unitario ($)</label>
+                                    <input id="inv-cost" type="number" class="form-control" placeholder="0.00">
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label fw-bold small">Stock Mínimo</label>
+                                    <input id="inv-min" type="number" class="form-control" placeholder="Alerta en...">
+                                </div>
+                            </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button onclick="saveInventory()" class="btn btn-success px-4 fw-bold"><i class="fas fa-save me-2"></i> Guardar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- MODAL USUARIO -->
+    <div class="modal fade" id="modal-user" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Usuario</h5><button class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><input type="hidden" id="u-id"><input id="u-name" class="form-control mb-2" placeholder="Username"><input id="u-pass" type="password" class="form-control mb-2" placeholder="Contraseña (dejar en blanco para no cambiar)"><select id="u-role" class="form-select"><option value="cashier">Cajero</option><option value="cook">Cocinero</option><option value="admin">Admin</option></select></div><div class="modal-footer"><button onclick="saveUser()" class="btn btn-primary">Guardar</button></div></div></div></div>
+
+    <!-- MODAL STAFF -->
+    <div class="modal fade" id="modal-staff" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header"><h5 class="modal-title">Personal</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+                <div class="modal-body">
+                    <input type="hidden" id="st-id">
+                    <div class="row g-2 mb-2">
+                        <div class="col"><input id="st-nombre" class="form-control" placeholder="Nombre"></div>
+                        <div class="col"><input id="st-apellido" class="form-control" placeholder="Apellido"></div>
+                    </div>
+                    <select id="st-rol" class="form-select mb-2"><option value="Mesero">Mesero</option><option value="Cocinero">Cocinero</option><option value="Cajero">Cajero</option><option value="Gerente">Gerente</option><option value="Repartidor">Repartidor</option></select>
+                    <input id="st-telefono" class="form-control mb-2" placeholder="Teléfono">
+                    <input id="st-email" class="form-control mb-2" placeholder="Email">
+                    <div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="st-estado" checked><label class="form-check-label" for="st-estado">Activo</label></div>
+                </div>
+                <div class="modal-footer"><button data-action="save-staff" class="btn btn-primary">Guardar</button></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="admin.js"></script>
+    
+    <script>
+        // Lógica UI para Sidebar Móvil
+        function toggleSidebar() {
+            document.getElementById('staff-sidebar').classList.toggle('show');
+            document.getElementById('sidebar-overlay').classList.toggle('show');
+        }
+        function closeSidebarMobile() {
+            if(window.innerWidth < 992) toggleSidebar();
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tu Carrito - Momoy's Burger</title>
+    <link href="bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        body { background-color: #F9F7F2; color: #2C3E50; }
+        .cart-container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .cart-header { text-align: center; margin-bottom: 30px; border-bottom: 2px dashed #D35400; padding-bottom: 20px; }
+        .cart-title { font-weight: 900; color: #D35400; font-size: 2rem; letter-spacing: 1px; }
+        
+        .item-carrito { 
+            background: white; 
+            border-radius: 12px; 
+            padding: 15px; 
+            margin-bottom: 15px; 
+            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-left: 5px solid #D35400;
+        }
+        .item-details h4 { font-weight: 800; font-size: 1.1rem; margin: 0; }
+        .item-details p { margin: 0; color: #7f8c8d; font-size: 0.9rem; }
+        .item-price { font-weight: bold; font-size: 1.2rem; color: #2C3E50; }
+        
+        .cart-summary { 
+            background: #2C3E50; 
+            color: white; 
+            padding: 20px; 
+            border-radius: 15px; 
+            margin-top: 30px; 
+            text-align: center;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+        }
+        .total-amount { font-size: 2.5rem; font-weight: 900; color: #FFC107; }
+        
+        .btn-confirm {
+            background-color: #27AE60;
+            color: white;
+            font-weight: 800;
+            padding: 15px;
+            border-radius: 50px;
+            width: 100%;
+            border: none;
+            font-size: 1.2rem;
+            margin-top: 20px;
+            box-shadow: 0 4px 0 #1E8449;
+            transition: transform 0.1s;
+        }
+        .btn-confirm:active { transform: translateY(2px); box-shadow: none; }
+        
+        .btn-continue {
+            background: transparent;
+            border: 2px solid #D35400;
+            color: #D35400;
+            font-weight: bold;
+            padding: 10px;
+            border-radius: 50px;
+            width: 100%;
+            margin-top: 15px;
+            transition: all 0.2s;
+        }
+        .btn-continue:hover { background: #D35400; color: white; }
+        
+        /* Estilos para el popup de promoción */
+        .promo-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.7);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            animation: fadeIn 0.3s;
+        }
+        .promo-overlay.active { display: flex; }
+        
+        .promo-popup {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            max-width: 450px;
+            width: 90%;
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            animation: slideUp 0.3s;
+        }
+        
+        .promo-icon {
+            font-size: 4rem;
+            margin-bottom: 15px;
+            animation: bounce 1s infinite;
+        }
+        
+        .promo-title {
+            font-size: 1.8rem;
+            font-weight: 900;
+            color: #D35400;
+            margin-bottom: 10px;
+        }
+        
+        .promo-description {
+            font-size: 1.1rem;
+            color: #2C3E50;
+            margin-bottom: 20px;
+        }
+        
+        .promo-savings {
+            background: #FFC107;
+            color: #2C3E50;
+            padding: 10px 20px;
+            border-radius: 50px;
+            font-weight: 800;
+            font-size: 1.3rem;
+            display: inline-block;
+            margin-bottom: 20px;
+        }
+        
+        .btn-promo-accept {
+            background: #27AE60;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 50px;
+            font-weight: 800;
+            font-size: 1.1rem;
+            margin-right: 10px;
+            cursor: pointer;
+            box-shadow: 0 4px 0 #1E8449;
+        }
+        
+        .btn-promo-decline {
+            background: transparent;
+            border: 2px solid #95a5a6;
+            color: #7f8c8d;
+            padding: 15px 30px;
+            border-radius: 50px;
+            font-weight: 800;
+            font-size: 1.1rem;
+            cursor: pointer;
+        }
+        
+        .promo-badge {
+            background: #27AE60;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 800;
+            display: inline-block;
+            margin-left: 10px;
+        }
+        
+        .discount-line {
+            text-decoration: line-through;
+            color: #95a5a6;
+            font-size: 1.2rem;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        @keyframes slideUp {
+            from { transform: translateY(50px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Popup de Promoción 3x2 -->
+    <div class="promo-overlay" id="promo-overlay">
+        <div class="promo-popup">
+            <div class="promo-icon">🎉</div>
+            <div class="promo-title" id="promo-title">¡PROMOCIÓN 3x2!</div>
+            <div class="promo-description" id="promo-description">
+                Tienes 2 hamburguesas. ¿Quieres agregar 1 más GRATIS?
+            </div>
+            <div class="promo-savings" id="promo-savings">
+                ¡Ahorras $70!
+            </div>
+            <div>
+                <button class="btn-promo-accept" onclick="aceptarPromocion()">
+                    ¡SÍ, QUIERO! 🎁
+                </button>
+                <button class="btn-promo-decline" onclick="cerrarPromoPopup()">
+                    No, gracias
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="cart-container">
+        <div class="cart-header">
+            <div class="cart-title"><i class="fas fa-shopping-cart me-2"></i>TU PEDIDO</div>
+            <p class="mb-0 text-muted">Revisa tus productos antes de confirmar</p>
+        </div>
+
+        <div id="carrito-container">
+            <!-- Items inyectados por JS -->
+        </div>
+
+        <div class="cart-summary">
+            <h5 class="mb-0 opacity-75">TOTAL A PAGAR</h5>
+            <div id="discount-info" style="display: none; color: #27AE60; font-size: 1rem; margin-top: 10px;">
+                <span class="discount-line" id="original-total">$0</span>
+                <span class="promo-badge">3x2 APLICADO</span>
+            </div>
+            <div class="total-amount" id="total">$0</div>
+        </div>
+
+        <button class="btn-confirm" onclick="confirmarPedido()">
+            CONFIRMAR PEDIDO <i class="fas fa-check-circle ms-2"></i>
+        </button>
+
+        <button class="btn-continue" onclick="window.location.href='/'">
+            Seguir comprando
+        </button>
+    </div>
+
+    <script>
+        let carrito = JSON.parse(localStorage.getItem('carrito')) || [];
+        const cliente = localStorage.getItem('customerName');
+        const tipo = localStorage.getItem('serviceType');
+        let promocionActiva = null; // Guarda la promoción detectada
+        let descuentoAplicado = 0;
+
+        // Detectar promociones 3x2 disponibles
+        function detectarPromociones() {
+            const itemsPorCategoria = {};
+            
+            // Agrupar items por nombre (mismo producto)
+            carrito.forEach(item => {
+                const key = item.nombre;
+                if (!itemsPorCategoria[key]) {
+                    itemsPorCategoria[key] = {
+                        items: [],
+                        totalQty: 0,
+                        categoria: item.categoria || 'general'
+                    };
+                }
+                itemsPorCategoria[key].items.push(item);
+                itemsPorCategoria[key].totalQty += item.qty;
+            });
+
+            // Buscar productos con qty >= 2 (elegibles para 3x2)
+            for (const [nombre, data] of Object.entries(itemsPorCategoria)) {
+                if (data.totalQty >= 2) {
+                    // Calcular el precio más barato (el que sería gratis)
+                    const precios = data.items.map(i => i.precioUnitario + (i.extraPrice || 0));
+                    const precioMasBarato = Math.min(...precios);
+                    
+                    return {
+                        nombre: nombre,
+                        cantidadActual: data.totalQty,
+                        ahorro: precioMasBarato,
+                        categoria: data.categoria
+                    };
+                }
+            }
+            return null;
+        }
+
+        // Mostrar popup de promoción
+        function mostrarPromoPopup(promo) {
+            if (!promo) return;
+            
+            promocionActiva = promo;
+            const overlay = document.getElementById('promo-overlay');
+            const title = document.getElementById('promo-title');
+            const description = document.getElementById('promo-description');
+            const savings = document.getElementById('promo-savings');
+            
+            title.innerText = '🎉 ¡PROMOCIÓN 3x2!';
+            description.innerHTML = `Tienes <strong>${promo.cantidadActual} ${promo.nombre}</strong>.<br>¿Quieres agregar 1 más <strong>GRATIS</strong>?`;
+            savings.innerText = `¡Ahorras $${promo.ahorro}!`;
+            
+            overlay.classList.add('active');
+        }
+
+        function cerrarPromoPopup() {
+            document.getElementById('promo-overlay').classList.remove('active');
+            promocionActiva = null;
+        }
+
+        function aceptarPromocion() {
+            if (!promocionActiva) return;
+            
+            // Agregar el item gratis al carrito
+            const itemBase = carrito.find(i => i.nombre === promocionActiva.nombre);
+            if (itemBase) {
+                // Incrementar cantidad en 1
+                itemBase.qty += 1;
+                
+                // Marcar que tiene descuento 3x2
+                itemBase.promo3x2 = true;
+                
+                // Guardar descuento aplicado
+                descuentoAplicado = promocionActiva.ahorro;
+                
+                localStorage.setItem('carrito', JSON.stringify(carrito));
+                cerrarPromoPopup();
+                renderCarrito();
+                
+                // Mostrar notificación de éxito
+                alert('🎉 ¡Promoción 3x2 aplicada! El producto más barato es GRATIS');
+            }
+        }
+
+        function calcularTotalConDescuento() {
+            let total = 0;
+            let descuento = 0;
+            
+            // Agrupar por nombre para detectar 3x2
+            const grupos = {};
+            carrito.forEach(item => {
+                if (!grupos[item.nombre]) {
+                    grupos[item.nombre] = [];
+                }
+                grupos[item.nombre].push(item);
+            });
+            
+            // Calcular total y descuentos
+            for (const [nombre, items] of Object.entries(grupos)) {
+                const totalQty = items.reduce((sum, i) => sum + i.qty, 0);
+                const precios = items.map(i => (i.precioUnitario + (i.extraPrice || 0)) * i.qty);
+                const subtotal = precios.reduce((sum, p) => sum + p, 0);
+                
+                total += subtotal;
+                
+                // Si tiene 3 o más, aplicar descuento del más barato
+                if (totalQty >= 3) {
+                    const precioUnitarios = items.map(i => i.precioUnitario + (i.extraPrice || 0));
+                    const masBarato = Math.min(...precioUnitarios);
+                    descuento += masBarato;
+                }
+            }
+            
+            return { total, descuento, totalFinal: total - descuento };
+        }
+
+        function renderCarrito() {
+            const contenedor = document.getElementById('carrito-container');
+            contenedor.innerHTML = '';
+
+            if (carrito.length === 0) {
+                contenedor.innerHTML = '<div class="text-center py-5 text-muted"><h4>Tu carrito está vacío ☹️</h4></div>';
+                document.getElementById('total').innerText = '$0';
+                document.getElementById('discount-info').style.display = 'none';
+                return;
+            }
+
+            carrito.forEach((p, index) => {
+                const precioItem = (p.precioUnitario + (p.extraPrice || 0));
+                const subtotal = precioItem * p.qty;
+                
+                const promoBadge = p.promo3x2 ? '<span class="promo-badge">3x2</span>' : '';
+
+                contenedor.innerHTML += `
+                    <div class="item-carrito">
+                        <div class="item-details">
+                            <h4>${p.nombre} ${promoBadge}</h4>
+                            <p>${p.mods ? p.mods.join(', ') : ''}</p>
+                            <div class="mt-1">
+                                <span class="badge bg-secondary">${p.qty} unid.</span>
+                                <span class="text-muted small ms-2">$${precioItem} c/u</span>
+                            </div>
+                        </div>
+                        <div class="text-end">
+                            <div class="item-price">$${subtotal}</div>
+                            <button class="btn btn-sm text-danger p-0 mt-1" onclick="eliminarDelCarrito(${index})">
+                                <i class="fas fa-trash"></i> Eliminar
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+
+            // Calcular total con descuentos
+            const { total, descuento, totalFinal } = calcularTotalConDescuento();
+            
+            if (descuento > 0) {
+                document.getElementById('discount-info').style.display = 'block';
+                document.getElementById('original-total').innerText = '$' + total;
+                document.getElementById('total').innerText = '$' + totalFinal;
+            } else {
+                document.getElementById('discount-info').style.display = 'none';
+                document.getElementById('total').innerText = '$' + total;
+            }
+            
+            // Detectar y mostrar promoción si aplica
+            const promoDisponible = detectarPromociones();
+            if (promoDisponible && !carrito.some(i => i.promo3x2)) {
+                // Solo mostrar si no hay promoción ya aplicada
+                setTimeout(() => mostrarPromoPopup(promoDisponible), 500);
+            }
+        }
+
+        function eliminarDelCarrito(index) {
+            carrito.splice(index, 1);
+            localStorage.setItem('carrito', JSON.stringify(carrito));
+            renderCarrito();
+        }
+
+        async function confirmarPedido() {
+            if (carrito.length === 0) return alert("Agrega productos al carrito");
+            if (!cliente || !tipo) return alert("Faltan datos del cliente. Vuelve al inicio.");
+
+            const { totalFinal } = calcularTotalConDescuento();
+
+            const orden = {
+                cliente,
+                tipo,
+                items: carrito,
+                total: totalFinal,
+                promociones: carrito.some(i => i.promo3x2) ? ['3x2'] : []
+            };
+
+            try {
+                const res = await fetch('/api/pedido', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(orden)
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    // Limpiar carrito
+                    localStorage.removeItem('carrito');
+                    // Guardar ID de orden para tracking
+                    localStorage.setItem('lastOrderId', data.numeroOrden);
+                    // Redirigir a tracking
+                    window.location.href = '/?track=true';
+                } else {
+                    alert("Error al enviar el pedido.");
+                }
+            } catch (e) {
+                console.error(e);
+                alert("Error de conexión.");
+            }
+        }
+
+        // Iniciar
+        renderCarrito();
+    </script>
+</body>
+</html>

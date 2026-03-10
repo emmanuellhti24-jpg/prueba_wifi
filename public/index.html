@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Momoy's Burger</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🍔</text></svg>">
+    
+    <!-- DNS PREFETCH para recursos externos -->
+    <link rel="dns-prefetch" href="//cdnjs.cloudflare.com">
+    
+    <!-- CSS Dependencies -->
+    <link href="bootstrap.min.css" rel="stylesheet">
+    <link href="fontawesome.css" rel="stylesheet">
+    <link href="styles.css" rel="stylesheet">
+</head>
+<body class="fondo">
+    <!-- Carrito Flotante -->
+    <!-- Carrito Flotante — Pill Expandible -->
+<div class="cart-float" id="cart-float" style="display: none;" onclick="window.openCartModal()">
+  <div class="cart-float__icon">
+    <i class="fas fa-shopping-cart"></i>
+    <div class="cart-badge" id="cart-count">0</div>
+  </div>
+  <div class="cart-float__info">
+    <span class="cart-float__items" id="cart-items-label">0 ítems</span>
+    <span class="cart-float__price" id="cart-total-label">$0.00</span>
+  </div>
+</div>
+
+
+    <!-- PASO 1: NOMBRE -->
+    <div id="step-1" class="step-container">
+        <div class="mb-4">
+            <i class="fas fa-hamburger fa-4x text-warning mb-3"></i>
+            <h1 class="client-title" style="font-size: 3rem;">MOMOY'S BURGER</h1>
+            <p class="subtitle">¡Bienvenido!</p>
+        </div>
+        
+        <div class="card p-4 shadow-lg border-0" style="background: rgba(0,0,0,0.3); border-radius: 20px; width: 100%; max-width: 450px; backdrop-filter: blur(10px);">
+            <label class="text-white mb-3 fw-bold h5">¿Cómo te llamas?</label>
+            <input type="text" id="client-name" class="form-control form-control-lg text-center mb-4 rounded-pill" placeholder="Escribe tu nombre aquí" style="height: 60px; font-size: 1.2rem;">
+            <!-- Llamada explícita a window.goToStep -->
+            <button type="button" class="btn-primary-client" onclick="window.goToStep(2)" style="height: 60px; font-size: 1.2rem;">CONTINUAR <i class="fas fa-arrow-right ms-2"></i></button>
+        </div>
+        
+        <button class="btn btn-sm text-white-50 mt-5" onclick="window.abrirLoginStaff()"><i class="fas fa-lock"></i> Acceso Staff</button>
+    </div>
+
+    <!-- PASO 2: SERVICIO -->
+    <div id="step-2" class="step-container hidden">
+        <h1 class="client-title mb-2">¡HOLA <span id="display-name"></span>!</h1>
+        <p class="subtitle mb-5 opacity-75">¿Qué se te antoja hoy?</p>
+        
+        <h3 class="text-warning mb-4 fw-bold">¿DÓNDE COMERÁS?</h3>
+        
+        <div class="d-grid gap-4 col-12 col-md-5 mx-auto">
+            <button class="btn-primary-client" onclick="window.setService('Comer aqui')">
+                <i class="fas fa-utensils me-2"></i> COMER AQUÍ
+            </button>
+            <button class="btn-primary-client" style="background-color: #FFA000 !important;" onclick="window.setService('Para llevar')">
+                <i class="fas fa-shopping-bag me-2"></i> PARA LLEVAR
+            </button>
+        </div>
+        
+        <button class="btn btn-link text-white mt-5 text-decoration-none" onclick="window.goToStep(1)">← Volver</button>
+    </div>
+
+    <!-- PASO 3: MENÚ -->
+    <div id="step-3" class="hidden container-fluid py-4">
+        <div id="menu-grid" class="flex justify-content-between align-items-center p-4">
+            <div class="col-12 text-center text-white py-5">
+                <div class="spinner-border text-warning" role="status"></div>
+                <p class="mt-3">Cargando menú...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- PASO 4: ESTATUS -->
+    <div id="step-status" class="step-container hidden">
+        <p class="text-white-50 mb-2 text-uppercase spacing">Tu número de orden</p>
+        <div class="order-id-display mb-4" id="track-order-id">#0</div>
+        
+        <div class="card bg-dark border-secondary p-4 mb-4" style="width: 100%; max-width: 500px; border-radius: 20px;">
+            <div id="track-status-text" class="status-display status-IN_KITCHEN">ENVIADO</div>
+            <div class="progress mb-3" style="height: 6px; background: rgba(255,255,255,0.1);">
+                <div id="status-bar" class="progress-bar bg-warning" role="progressbar" style="width: 10%"></div>
+            </div>
+            <p class="text-white lead mb-0" id="track-msg">Pasa a pagar a caja para iniciar.</p>
+        </div>
+
+        <!-- Botón para reiniciar (Oculto por defecto) -->
+        <button id="btn-new-order" class="btn-primary-client hidden mt-4" onclick="window.resetOrder()" style="max-width: 300px;">
+            <i class="fas fa-redo me-2"></i> HACER OTRO PEDIDO
+        </button>
+
+        <p class="text-white-50 small mt-5">No cierres esta ventana para ver el progreso.</p>
+    </div>
+
+    <!-- MODAL PRODUCTO -->
+    <div class="modal fade" id="productModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content bg-white text-dark">
+                <div class="modal-header border-0 pb-0">
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body text-start pt-0">
+                    <h3 class="text-danger fw-bold mb-1" id="modal-prod-name">Producto</h3>
+                    <p class="text-muted small mb-3" id="modal-prod-desc">Categoria</p>
+                    <input type="hidden" id="modal-prod-id">
+                    
+                    <hr class="opacity-10">
+
+                    <div id="ingredients-section" class="mb-3"></div>
+                    
+                    <div id="extras-section" class="mb-4"></div>
+
+                    <div class="bg-light p-3 rounded-4 d-flex justify-content-between align-items-center">
+                        <label class="fw-bold m-0">Cantidad:</label>
+                        <div class="d-flex align-items-center gap-3">
+                            <button class="btn btn-outline-secondary rounded-circle" style="width: 35px; height: 35px; padding: 0;" onclick="window.adjustQty(-1)"><i class="fas fa-minus"></i></button>
+                            <span id="modal-qty" class="fw-bold fs-4" style="min-width: 30px; text-align: center;">1</span>
+                            <button class="btn btn-outline-secondary rounded-circle" style="width: 35px; height: 35px; padding: 0;" onclick="window.adjustQty(1)"><i class="fas fa-plus"></i></button>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer border-0 pt-0">
+                    <button class="btn-primary-client" onclick="window.addToCart()">AGREGAR AL PEDIDO</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL CARRITO -->
+    <div class="modal fade" id="cartModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content bg-white text-dark">
+                <div class="modal-header" style="background: #D35400; color: white;">
+                    <h5 class="modal-title"><i class="fas fa-shopping-cart me-2"></i>Tu Carrito</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="modal-cart-items" style="max-height: 400px; overflow-y: auto;">
+                    <div class="text-center text-muted py-5" id="empty-cart">
+                        <i class="fas fa-shopping-cart fa-3x mb-3 opacity-50"></i>
+                        <p>Tu carrito está vacío</p>
+                    </div>
+                </div>
+                <div class="modal-footer" style="background: #F9F7F2;">
+                    <div class="w-100">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h4 class="m-0">Total:</h4>
+                            <h3 class="m-0" style="color: #D35400;">$<span id="cart-total">0</span></h3>
+                        </div>
+                        <button class="btn btn-add w-100" onclick="window.confirmOrder()" id="btn-confirm-order">
+                            <i class="fas fa-check-circle me-2"></i>Confirmar Pedido
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL LOGIN STAFF -->
+    <div class="modal fade" id="loginModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered modal-sm">
+            <div class="modal-content border-0 bg-white">
+                <div class="modal-body text-center p-4">
+                    <i class="fas fa-user-shield fa-2x text-dark mb-3"></i>
+                    <h5 class="fw-bold mb-3 text-dark">Acceso Staff</h5>
+                    <input type="text" id="login-user" class="form-control mb-2 text-center bg-light border-0" placeholder="Usuario">
+                    <input type="password" id="login-pass" class="form-control mb-3 text-center bg-light border-0" placeholder="Contraseña">
+                    <button class="btn btn-dark w-100 rounded-pill" onclick="window.login()">Entrar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SCRIPTS AL FINAL -->
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="bootstrap.bundle.min.js"></script>
+    <script src="js/client.js"></script>
+
+</body>
+</html>
