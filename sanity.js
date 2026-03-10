@@ -6,7 +6,7 @@ require('dotenv').config();
 const http = require('http');
 
 // Configuración
-const PORT = process.env.PORT || 3000; // Asegúrate que coincida con tu puerto
+const PORT = process.env.PORT || 3001; // Asegúrate que coincida con tu puerto
 const HOST = 'localhost';
 
 // Función auxiliar para hacer peticiones HTTP sin dependencias externas

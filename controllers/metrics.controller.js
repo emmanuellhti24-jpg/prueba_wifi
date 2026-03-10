@@ -84,7 +84,7 @@ exports.getHourlySales = async (req, res) => {
       },
       { $sort: { _id: 1 } }
     ]);
-
+  
     const hourlyData = Array.from({ length: 24 }, (_, i) => ({ hour: i, sales: 0, count: 0 }));
     result.forEach(item => {
       hourlyData[item._id] = { hour: item._id, sales: item.totalVentas, count: item.numeroVentas };

@@ -46,7 +46,6 @@ const files = [
 console.log("⬇️  Descargando dependencias para modo offline...");
 
 files.forEach(file => {
-    // Determinar ruta correcta (si es fuente va a /webfonts)
     const filePath = path.join(publicDir, file.name);
     const fileStream = fs.createWriteStream(filePath);
 

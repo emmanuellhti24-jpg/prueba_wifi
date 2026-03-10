@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Buns & Grill</title>
+    <link href="bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #2C3E50;
+            color: #ECF0F1;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .navbar-custom {
+            background-color: #34495E;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+        .card-metric {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 15px;
+            color: white;
+            padding: 25px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+        .card-metric h3 {
+            font-size: 2.5rem;
+            font-weight: bold;
+            margin: 0;
+        }
+        .card-metric p {
+            margin: 0;
+            opacity: 0.9;
+            font-size: 0.9rem;
+        }
+        .chart-container {
+            background: #34495E;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+        .chart-title {
+            color: #ECF0F1;
+            font-weight: 600;
+            margin-bottom: 15px;
+            font-size: 1.2rem;
+        }
+        .alert-inventory {
+            background: #E74C3C;
+            border: none;
+            border-radius: 10px;
+            color: white;
+            padding: 15px;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-dark navbar-custom">
+        <div class="container-fluid">
+            <span class="navbar-brand mb-0 h1">
+                <i class="fas fa-chart-line me-2"></i>Dashboard - Buns & Grill
+            </span>
+            <div>
+                <span class="badge bg-success me-2" id="user-badge">Admin</span>
+                <button class="btn btn-outline-light btn-sm" onclick="location.href='/staff.html'">
+                    <i class="fas fa-arrow-left me-1"></i>Volver
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid mt-4">
+        <!-- Métricas Financieras -->
+        <div class="row">
+            <div class="col-md-3">
+                <div class="card-metric" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                    <p><i class="fas fa-dollar-sign me-2"></i>Ventas Totales</p>
+                    <h3 id="total-revenue">$0</h3>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card-metric" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                    <p><i class="fas fa-coins me-2"></i>Costos Totales</p>
+                    <h3 id="total-cost">$0</h3>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card-metric" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+                    <p><i class="fas fa-chart-line me-2"></i>Ganancia Real</p>
+                    <h3 id="real-profit">$0</h3>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card-metric" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);">
+                    <p><i class="fas fa-percentage me-2"></i>Margen</p>
+                    <h3 id="profit-margin">0%</h3>
+                </div>
+            </div>
+        </div>
+
+        <!-- Gráficas -->
+        <div class="row mt-4">
+            <!-- Top Productos -->
+            <div class="col-md-6">
+                <div class="chart-container">
+                    <div class="chart-title">
+                        <i class="fas fa-trophy text-warning me-2"></i>Top 5 Productos Más Vendidos
+                    </div>
+                    <canvas id="chartTopProducts" height="300"></canvas>
+                </div>
+            </div>
+
+            <!-- Distribución por Categoría -->
+            <div class="col-md-6">
+                <div class="chart-container">
+                    <div class="chart-title">
+                        <i class="fas fa-chart-pie text-info me-2"></i>Distribución por Categoría
+                    </div>
+                    <canvas id="chartCategory" height="300"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Ventas por Hora -->
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="chart-container">
+                    <div class="chart-title">
+                        <i class="fas fa-clock text-success me-2"></i>Ventas por Hora del Día
+                    </div>
+                    <canvas id="chartHourly" height="100"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Alertas de Inventario -->
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="chart-container">
+                    <div class="chart-title">
+                        <i class="fas fa-exclamation-triangle text-danger me-2"></i>Alertas de Inventario Bajo
+                    </div>
+                    <div id="inventory-alerts"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        const API_URL = '/api';
+        const token = localStorage.getItem('token');
+        const role = localStorage.getItem('role');
+
+        if (!token || role !== 'admin') {
+            alert('Acceso denegado. Solo administradores.');
+            window.location.href = '/';
+        }
+
+        document.getElementById('user-badge').innerText = role.toUpperCase();
+
+        let chartTop, chartCategory, chartHourly;
+
+        // Cargar métricas financieras
+        async function loadFinancialMetrics() {
+            try {
+                const res = await fetch(`${API_URL}/admin/metrics/financial`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const data = await res.json();
+
+                document.getElementById('total-revenue').innerText = `$${data.totalRevenue.toFixed(2)}`;
+                document.getElementById('total-cost').innerText = `$${data.totalCost.toFixed(2)}`;
+                document.getElementById('real-profit').innerText = `$${data.realProfit.toFixed(2)}`;
+                document.getElementById('profit-margin').innerText = `${data.profitMargin}%`;
+            } catch (error) {
+                console.error('Error cargando métricas financieras:', error);
+            }
+        }
+
+        // Cargar top productos
+        async function loadTopProducts() {
+            try {
+                const res = await fetch(`${API_URL}/admin/metrics/top-products`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const data = await res.json();
+
+                const ctx = document.getElementById('chartTopProducts').getContext('2d');
+                
+                if (chartTop) chartTop.destroy();
+
+                chartTop = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: data.map(p => p._id),
+                        datasets: [{
+                            label: 'Unidades Vendidas',
+                            data: data.map(p => p.totalVendido),
+                            backgroundColor: [
+                                'rgba(255, 99, 132, 0.8)',
+                                'rgba(54, 162, 235, 0.8)',
+                                'rgba(255, 206, 86, 0.8)',
+                                'rgba(75, 192, 192, 0.8)',
+                                'rgba(153, 102, 255, 0.8)'
+                            ],
+                            borderColor: [
+                                'rgba(255, 99, 132, 1)',
+                                'rgba(54, 162, 235, 1)',
+                                'rgba(255, 206, 86, 1)',
+                                'rgba(75, 192, 192, 1)',
+                                'rgba(153, 102, 255, 1)'
+                            ],
+                            borderWidth: 2
+                        }]
+                    },
+                    options: {
+                        indexAxis: 'y',
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false },
+                            title: { display: false }
+                        },
+                        scales: {
+                            x: { 
+                                ticks: { color: '#ECF0F1' },
+                                grid: { color: 'rgba(255,255,255,0.1)' }
+                            },
+                            y: { 
+                                ticks: { color: '#ECF0F1' },
+                                grid: { color: 'rgba(255,255,255,0.1)' }
+                            }
+                        }
+                    }
+                });
+            } catch (error) {
+                console.error('Error cargando top productos:', error);
+            }
+        }
+
+        // Cargar distribución por categoría
+        async function loadCategoryDistribution() {
+            try {
+                const res = await fetch(`${API_URL}/admin/metrics/category`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const data = await res.json();
+
+                const ctx = document.getElementById('chartCategory').getContext('2d');
+                
+                if (chartCategory) chartCategory.destroy();
+
+                chartCategory = new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: data.map(c => c.category),
+                        datasets: [{
+                            data: data.map(c => c.units),
+                            backgroundColor: [
+                                'rgba(255, 99, 132, 0.8)',
+                                'rgba(54, 162, 235, 0.8)',
+                                'rgba(255, 206, 86, 0.8)',
+                                'rgba(75, 192, 192, 0.8)'
+                            ],
+                            borderColor: '#2C3E50',
+                            borderWidth: 3
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'bottom',
+                                labels: { color: '#ECF0F1', font: { size: 14 } }
+                            }
+                        }
+                    }
+                });
+            } catch (error) {
+                console.error('Error cargando categorías:', error);
+            }
+        }
+
+        // Cargar ventas por hora
+        async function loadHourlySales() {
+            try {
+                const res = await fetch(`${API_URL}/admin/metrics/hourly`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const data = await res.json();
+
+                const ctx = document.getElementById('chartHourly').getContext('2d');
+                
+                if (chartHourly) chartHourly.destroy();
+
+                chartHourly = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: data.map(h => `${h.hour}:00`),
+                        datasets: [{
+                            label: 'Ventas ($)',
+                            data: data.map(h => h.sales),
+                            backgroundColor: 'rgba(75, 192, 192, 0.6)',
+                            borderColor: 'rgba(75, 192, 192, 1)',
+                            borderWidth: 2
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { labels: { color: '#ECF0F1' } }
+                        },
+                        scales: {
+                            x: { 
+                                ticks: { color: '#ECF0F1' },
+                                grid: { color: 'rgba(255,255,255,0.1)' }
+                            },
+                            y: { 
+                                ticks: { color: '#ECF0F1' },
+                                grid: { color: 'rgba(255,255,255,0.1)' }
+                            }
+                        }
+                    }
+                });
+            } catch (error) {
+                console.error('Error cargando ventas por hora:', error);
+            }
+        }
+
+        // Cargar alertas de inventario
+        async function loadInventoryAlerts() {
+            try {
+                const res = await fetch(`${API_URL}/admin/metrics/inventory-alerts`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const data = await res.json();
+
+                const container = document.getElementById('inventory-alerts');
+                
+                if (data.length === 0) {
+                    container.innerHTML = '<div class="alert alert-success">✅ Todos los insumos tienen stock suficiente</div>';
+                } else {
+                    container.innerHTML = data.map(item => `
+                        <div class="alert-inventory">
+                            <i class="fas fa-exclamation-circle me-2"></i>
+                            <strong>${item.nombre}</strong>: ${item.cantidad} ${item.unidad} 
+                            (Mínimo: ${item.minimo})
+                        </div>
+                    `).join('');
+                }
+            } catch (error) {
+                console.error('Error cargando alertas:', error);
+            }
+        }
+
+        // Cargar todo al iniciar
+        document.addEventListener('DOMContentLoaded', () => {
+            loadFinancialMetrics();
+            loadTopProducts();
+            loadCategoryDistribution();
+            loadHourlySales();
+            loadInventoryAlerts();
+
+            // Actualizar cada 30 segundos
+            setInterval(() => {
+                loadFinancialMetrics();
+                loadTopProducts();
+                loadCategoryDistribution();
+                loadHourlySales();
+                loadInventoryAlerts();
+            }, 30000);
+        });
+    </script>
+</body>
+</html>
