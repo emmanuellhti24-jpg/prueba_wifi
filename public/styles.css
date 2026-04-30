@@ -991,6 +991,16 @@ h2.text-center {
     align-items: center;
 }
 
+/* Imagen del carrito estricta para evitar deformaciones */
+.cart-item-img {
+    width: 60px !important;
+    height: 60px !important;
+    min-width: 60px;
+    flex-shrink: 0; /* Obliga a mantener el tamaño frente a fotos gigantes */
+    object-fit: cover;
+    border-radius: 8px;
+}
+
 .cart-float {
   position: fixed;
   bottom: 28px;

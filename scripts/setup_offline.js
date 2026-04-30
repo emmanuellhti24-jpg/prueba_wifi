@@ -2,69 +2,78 @@ const fs = require('fs');
 const https = require('https');
 const path = require('path');
 
-const publicDir = path.join(__dirname, '../public');
-const webfontsDir = path.join(publicDir, 'webfonts');
+const download = (url, dest) => {
+    return new Promise((resolve, reject) => {
+        const dir = path.dirname(dest);
+        // Crear directorio si no existe
+        if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+        }
 
-// Asegurar que existan directorios
-if (!fs.existsSync(publicDir)) fs.mkdirSync(publicDir);
-if (!fs.existsSync(webfontsDir)) fs.mkdirSync(webfontsDir);
+        const file = fs.createWriteStream(dest);
+        https.get(url, response => {
+            // Manejar redirecciones si las hay
+            if (response.statusCode === 302 || response.statusCode === 301) {
+                download(response.headers.location, dest).then(resolve).catch(reject);
+                return;
+            }
+            if (response.statusCode !== 200) {
+                reject(new Error(`Fallo al descargar '${url}' (Status: ${response.statusCode})`));
+                return;
+            }
+            response.pipe(file);
+            file.on('finish', () => file.close(resolve));
+        }).on('error', err => {
+            fs.unlink(dest, () => {});
+            reject(err);
+        });
+    });
+};
 
-const files = [
-    { 
-        url: 'https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css', 
-        name: 'bootstrap.min.css' 
-    },
-    { 
-        url: 'https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css.map', 
-        name: 'bootstrap.min.css.map' 
-    },
-    { 
-        url: 'https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js', 
-        name: 'bootstrap.bundle.min.js' 
-    },
-    { 
-        url: 'https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js.map', 
-        name: 'bootstrap.bundle.min.js.map' 
-    },
-    // --- FONT AWESOME 6.5.1 (Versión más reciente que corrige el error de Glyph bbox) ---
+// Lista de librerías para uso offline
+const assets = [
     {
-        url: 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css',
-        name: 'fontawesome.css'
+        url: 'https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css',
+        dest: path.join(__dirname, '../public/css/bootstrap.min.css')
     },
     {
-        url: 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/webfonts/fa-solid-900.woff2',
-        name: 'webfonts/fa-solid-900.woff2',
-        isFont: true
+        url: 'https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js',
+        dest: path.join(__dirname, '../public/js/bootstrap.bundle.min.js')
     },
     {
-        url: 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/webfonts/fa-solid-900.ttf',
-        name: 'webfonts/fa-solid-900.ttf',
-        isFont: true
+        url: 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css',
+        dest: path.join(__dirname, '../public/css/all.min.css')
+    },
+    {
+        url: 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/webfonts/fa-solid-900.woff2',
+        dest: path.join(__dirname, '../public/webfonts/fa-solid-900.woff2')
+    },
+    {
+        url: 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/webfonts/fa-regular-400.woff2',
+        dest: path.join(__dirname, '../public/webfonts/fa-regular-400.woff2')
+    },
+    {
+        url: 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/webfonts/fa-brands-400.woff2',
+        dest: path.join(__dirname, '../public/webfonts/fa-brands-400.woff2')
+    },
+    {
+        url: 'https://cdn.jsdelivr.net/npm/chart.js',
+        dest: path.join(__dirname, '../public/js/chart.min.js')
     }
 ];
 
-console.log("⬇️  Descargando dependencias para modo offline...");
+console.log('⬇️  Descargando recursos para uso 100% offline...');
 
-files.forEach(file => {
-    const filePath = path.join(publicDir, file.name);
-    const fileStream = fs.createWriteStream(filePath);
-
-    https.get(file.url, (response) => {
-        // Validación: Asegurar que la descarga fue exitosa (Status 200)
-        if (response.statusCode !== 200) {
-            console.error(`❌ Error descargando ${file.name}: Status ${response.statusCode}`);
-            response.resume(); // Liberar memoria
-            fileStream.close();
-            if (fs.existsSync(filePath)) fs.unlinkSync(filePath); // Borrar archivo corrupto
-            return;
-        }
-
-        response.pipe(fileStream);
-        fileStream.on('finish', () => {
-            fileStream.close();
-            console.log(`✅ ${file.name} descargado correctamente.`);
-        });
-    }).on('error', (err) => {
-        console.error(`❌ Error descargando ${file.name}:`, err.message);
-    });
+Promise.all(assets.map(asset => {
+    console.log(`⏳ Descargando: ${path.basename(asset.dest)}`);
+    return download(asset.url, asset.dest);
+})).then(() => {
+    console.log('\n✅ ¡Todos los recursos se han descargado con éxito!');
+    console.log('\n⚠️  ACCIÓN REQUERIDA: Asegúrate de que todos tus archivos HTML apunten a estas rutas locales:');
+    console.log('   - <link rel="stylesheet" href="/css/bootstrap.min.css">');
+    console.log('   - <link rel="stylesheet" href="/css/all.min.css">');
+    console.log('   - <script src="/js/bootstrap.bundle.min.js"></script>');
+    console.log('   - <script src="/js/chart.min.js"></script>');
+}).catch(err => {
+    console.error('\n❌ Error descargando recursos:', err);
 });

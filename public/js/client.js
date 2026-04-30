@@ -1,10 +1,4 @@
-// Inicialización segura de Socket.io
 let socket;
-try {
-    socket = io();
-} catch (e) {
-    console.warn("Socket.io no disponible (modo offline o error de carga)");
-}
 
 // Variables Globales
 let currentOrder = { cliente: '', tipo: '', items: [], total: 0 };
@@ -54,16 +48,18 @@ window.goToStep = function(step) {
     document.querySelectorAll('.step-container, #step-3').forEach(el => el.classList.add('hidden'));
     
     // Mostrar el paso deseado
+    const cartBtn = document.getElementById('cart-float') || document.querySelector('.carrito-float') || document.querySelector('.cart-float');
+    
     if(step === 3) {
         document.getElementById('step-3').classList.remove('hidden');
-        document.getElementById('cart-float').style.display = 'flex';
+        if (cartBtn) cartBtn.style.display = 'flex';
     } else if (step === 4) {
         document.getElementById('step-status').classList.remove('hidden');
-        document.getElementById('cart-float').style.display = 'none';
+        if (cartBtn) cartBtn.style.display = 'none';
     } else {
         const stepEl = document.getElementById(`step-${step}`);
         if(stepEl) stepEl.classList.remove('hidden');
-        document.getElementById('cart-float').style.display = 'none';
+        if (cartBtn) cartBtn.style.display = 'none';
     }
     
     window.scrollTo(0,0);
@@ -232,6 +228,11 @@ window.confirmOrder = function() {
     window.enviarPedido();
 };
 
+// Puente de compatibilidad por si el HTML todavía llama a la función antigua
+window.actualizarContador = function() {
+    updateCart();
+};
+
 function updateCart() {
     let total = 0;
     const groups = {};
@@ -286,7 +287,7 @@ function renderizarCarrito() {
         const itemEl = document.createElement('div');
         itemEl.className = 'cart-item-modern';
         itemEl.innerHTML = `
-            <img src="${item.imagen || 'https://via.placeholder.com/60'}" class="cart-item-img" style="width: 60px; height: 60px; object-fit: cover; border-radius: 8px;">
+            <img src="${item.imagen || 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCI+PHJlY3Qgd2lkdGg9IjYwIiBoZWlnaHQ9IjYwIiBmaWxsPSIjZWVlIi8+PC9zdmc+'}" class="cart-item-img">
             <div class="cart-item-info flex-grow-1 ms-3">
                 <div class="fw-bold">${item.nombre}</div>
                 <div class="text-muted small">$${(item.precioUnitario + item.extraPrice).toFixed(2)}</div>
@@ -465,25 +466,6 @@ function renderMenu(products) {
             </div>
     `}).join('');
 
-    function agregarAlCarrito(id) {
-        //  Find index  existing product in the cart
-        const productIndex = carrito.findIndex(item => item.productoId === id);
-        if (productIndex !== -1) {
-            // Product exists
-            carrito[productIndex].cantidad++;
-        } else {
-            // New product
-            const product = menuData.find(item => item.id === id);
-            if (!product) return console.warn("Producto no encontrado en menú");
-            carrito.push({ ...product, cantidad: 1 });
-        }
-        // Actualiza UI
-        updateCartUI();
-        // Actualiza Local Storage
-        saveCart();
-    }
-    
-    
     // Agregar Título y Botones al contenedor
     container.innerHTML = `<h2 class="w-100 text-center text-white mb-4">MENÚ</h2>` + container.innerHTML + `
         <div class="w-100 d-flex justify-content-center flex-wrap gap-3 mt-4">
@@ -506,7 +488,7 @@ function updateStatusUI(status, pedidoData = null) {
     const bar = document.getElementById('status-bar');
     const btnNew = document.getElementById('btn-new-order');
     
-    txt.className = 'status-display';
+    if (txt) txt.className = 'status-display';
 
     // Mapeo de estados a información visual
     const estadosInfo = {
@@ -551,24 +533,29 @@ function updateStatusUI(status, pedidoData = null) {
     const info = estadosInfo[status] || estadosInfo['PENDING_PAYMENT'];
     
     // Actualizar UI
-    txt.innerText = info.texto;
-    txt.classList.add(info.clase);
-    msg.innerText = info.mensaje;
-    bar.style.width = info.progreso + '%';
-    bar.className = 'progress-bar ' + info.colorBarra;
+    if (txt) {
+        txt.innerText = info.texto;
+        txt.classList.add(info.clase);
+    }
+    if (msg) msg.innerText = info.mensaje;
+    if (bar) {
+        bar.style.width = info.progreso + '%';
+        bar.className = 'progress-bar ' + info.colorBarra;
+    }
     
     // Mostrar botón de nuevo pedido si está completado
-    if (status === 'COMPLETED') {
-        btnNew.classList.remove('hidden');
-    } else {
-        btnNew.classList.add('hidden');
+    if (btnNew) {
+        if (status === 'COMPLETED') {
+            btnNew.classList.remove('hidden');
+        } else {
+            btnNew.classList.add('hidden');
+        }
     }
 
     // Reproducir sonido si está listo
     if (info.sonido) {
-        try { 
-            new Audio('https://actions.google.com/sounds/v1/cartoon/pop.ogg').play().catch(e=>{}); 
-        } catch(e){}
+        // El sonido externo se deshabilitó para evitar lentitud en redes sin internet.
+        console.log("¡Pedido Listo!");
     }
 
     // Log para debugging
@@ -577,6 +564,14 @@ function updateStatusUI(status, pedidoData = null) {
 
 // --- INICIO ---
 document.addEventListener('DOMContentLoaded', () => {
+    // Inicialización estricta de Socket.io
+    if (typeof io !== 'undefined') {
+        socket = io();
+        console.log("✅ Socket.io conectado correctamente en Cliente");
+    } else {
+        console.error("❌ ERROR: Librería Socket.io no encontrada en el navegador");
+    }
+
     // 1. Cargar menú (Siempre necesario por si se hace otro pedido)
     fetch('/api/products')
         .then(res => res.json())
@@ -636,8 +631,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // Listeners de Socket - Actualizaciones en tiempo real
     if(socket) {
         socket.on('actualizacion-pedido', (pedido) => {
-            if (myOrderId && pedido.numeroOrden === myOrderId) {
-                console.log('🔔 Actualización recibida:', pedido);
+            console.log('📡 [Socket] Señal de actualización:', pedido);
+            if (myOrderId && String(pedido.numeroOrden) === String(myOrderId)) {
+                console.log('🔔 ¡Es mi orden! Actualizando UI a:', pedido.status);
                 updateStatusUI(pedido.status, pedido);
                 
                 // Mostrar notificación visual si el navegador lo soporta

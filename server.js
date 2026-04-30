@@ -4,6 +4,7 @@ const https = require('https'); // Módulo para servidor seguro
 const fs = require('fs');       // Para leer certificados
 const os = require('os');
 const path = require('path');
+const dgram = require('dgram'); // Para el mini servidor DNS
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -51,7 +52,8 @@ const io = new Server(server, {
   }
 });
 
-const PORT = process.env.PORT || 3001;
+// Usar puerto 80 para HTTP o 443 para HTTPS (necesario para el router)
+const PORT = process.env.PORT || (server instanceof https.Server ? 443 : 80);
 
 // Conectar a la Base de Datos
 connectDB();
@@ -70,6 +72,22 @@ app.use(helmet({
 }));
 app.use(express.json()); // Parsear bodies de JSON
 app.use(express.urlencoded({ extended: true })); // Parsear bodies URL-encoded
+
+// --- MIDDLEWARE PORTAL CAUTIVO ---
+app.use((req, res, next) => {
+  const myIp = getNetworkIp();
+  const host = req.get('host') || '';
+  
+  // Rutas y dominios que usan iOS, Android y Windows para comprobar si hay internet
+  const isCaptiveCheck = req.path.match(/(generate_204|gen_204|hotspot-detect\.html|success\.txt|ncsi\.txt|connecttest\.txt)/i);
+  const isExternalDomain = host && !host.includes(myIp) && !host.includes('localhost') && !host.includes('127.0.0.1');
+
+  if (isCaptiveCheck || isExternalDomain) {
+    console.log(`📱 Dispositivo detectado, forzando portal: ${host}${req.url}`);
+    return res.redirect(302, `http://${myIp}/`);
+  }
+  next();
+});
 
 // Servir archivos estáticos desde la carpeta 'public'
 app.use(express.static(path.join(__dirname, 'public')));
@@ -162,8 +180,48 @@ function getNetworkIp() {
   return 'localhost';
 }
 
+// --- MINI SERVIDOR DNS (PORTAL CAUTIVO OFFLINE) ---
+// Resuelve CUALQUIER dominio hacia la IP de esta computadora
+const dnsServer = dgram.createSocket('udp4');
+dnsServer.on('message', (msg, rinfo) => {
+  try {
+    const response = Buffer.alloc(msg.length + 16);
+    msg.copy(response, 0, 0, msg.length); // Copiar la pregunta
+
+    // Modificar cabeceras para indicar que es una respuesta
+    response.writeUInt16BE(msg.readUInt16BE(0), 0); // ID de transacción
+    response.writeUInt16BE(0x8180, 2); // Flags: Respuesta estándar sin error
+    response.writeUInt16BE(1, 4); // Questions
+    response.writeUInt16BE(1, 6); // Answer RRs
+    response.writeUInt16BE(0, 8); // Authority RRs
+    response.writeUInt16BE(0, 10); // Additional RRs
+
+    // Construir la respuesta apuntando a tu IP
+    let offset = msg.length;
+    response.writeUInt16BE(0xC00C, offset); offset += 2; // Puntero al dominio consultado
+    response.writeUInt16BE(1, offset); offset += 2; // Type A (IPv4)
+    response.writeUInt16BE(1, offset); offset += 2; // Class IN
+    response.writeUInt32BE(60, offset); offset += 4; // TTL (60 seg)
+    response.writeUInt16BE(4, offset); offset += 2; // Longitud de la IP (4 bytes)
+
+    const ipParts = getNetworkIp().split('.');
+    ipParts.forEach(part => {
+      response.writeUInt8(parseInt(part), offset); offset += 1;
+    });
+
+    dnsServer.send(response, 0, offset, rinfo.port, rinfo.address);
+  } catch (err) {
+    // Ignorar errores de paquetes malformados
+  }
+});
+
 server.listen(PORT, () => {
   const protocol = server instanceof https.Server ? 'https' : 'http';
-  console.log(`🚀 Servidor corriendo en ${protocol}://localhost:${PORT}`);
-  console.log(`🔗 LINK PARA EL PORTAL CAUTIVO: ${protocol}://${getNetworkIp()}:${PORT}`);
+  console.log(`🚀 Servidor corriendo internamente en el puerto ${PORT}`);
+  console.log(`🔗 IP PARA EL ROUTER (Ingresa solo esto): ${getNetworkIp()}`);
+  
+  // Iniciar el DNS en el puerto 5300
+  dnsServer.bind(5300, () => {
+    console.log(`📡 Mini DNS Server escuchando en el puerto 5300`);
+  });
 });

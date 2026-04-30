@@ -146,10 +146,9 @@ const StaffApp = {
     },
 
     playAudio: function(type) {
-        const url = type === 'new' 
-            ? 'https://actions.google.com/sounds/v1/alarms/beep_short.ogg' 
-            : 'https://actions.google.com/sounds/v1/cartoon/pop.ogg';
-        new Audio(url).play().catch(e => console.log("Audio bloqueado"));
+        // En modo offline sin internet, bloqueamos las llamadas a Google para evitar lentitud.
+        // TODO: Descargar audios locales en /public/audio/ y usarlos aquí si se requiere sonido.
+        console.log(`🔔 Notificación de audio (${type}) omitida en modo offline.`);
     }
 };
 
